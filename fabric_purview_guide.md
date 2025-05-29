@@ -318,4 +318,4 @@ Data Governance Hierarchy:
 - Governance policy synchronization across platforms
 - Unified reporting and dashboard capabilities
 
-This comprehensive approach to Microsoft Purview and Fabric integration provides organizations with enterprise-grade data governance, security, and compliance capabilities while maintaining the performance and usability that make Fabric attractive for data analytics implementations.
+# This comprehensive approach to Microsoft Purview and Fabric integration provides organizations with enterprise-grade data governance, security, and compliance capabilities while maintaining the performance and usability that make Fabric attractive for data analytics implementations.
