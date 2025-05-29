@@ -286,4 +286,25 @@ Enterprise Tenant
 - Automation of security processes
 - Continuous improvement and refinement
 
-This framework provides a comprehensive approach to implementing security in Microsoft Fabric while acknowledging current limitations and providing practical solutions for common challenges.
+## Key Security Features Available
+### Row-Level Security:
+Row-level security (RLS) enables you to use group membership or execution context to control access to rows in a database table.
+[Row-level security (RLS) with Power BI - Microsoft Fabric | Microsoft Learn](https://learn.microsoft.com/en-us/fabric/data-warehouse/row-level-security)
+
+The implementation uses predicate-based security where row-level security prevents unauthorized viewing of rows in tables, using familiar WHERE clause filter predicates.
+
+### Column-Level Security:
+Dynamic data masking prevents unauthorized viewing of sensitive data by using masks to prevent access to complete, such as email addresses or numbers, and Microsoft announced the availability of both Column-Level and Row-Level Security in Fabric Warehouse & SQL Endpoint in Public preview Announcing.
+
+## Current Limitations and Challenges
+### Power BI Integration Limitations:
+- Limitations include expressions that today can only be defined using DAX including dynamic rules such as username() or userprincipalname()
+- Additionally, Power BI queries on a warehouse in Direct Lake mode will fall back to Direct Query mode to abide by row-level security.
+
+### Implementation Complexity:
+The security model requires careful planning as the access restriction logic is in the database tier, not in any single application tier, and each table must have its own row-level security defined separately.
+
+### Performance Considerations:
+There are performance implications as security policies can impact query execution, and the platform requires careful optimization of security predicates to maintain acceptable performance levels.
+
+# This framework provides a comprehensive approach to implementing security in Microsoft Fabric while acknowledging current limitations and providing practical solutions for common challenges.
