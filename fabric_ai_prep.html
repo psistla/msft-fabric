@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Prep for AI — Microsoft Fabric</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── MERIDIAN TOKENS ─────────────────────────────────────────────── */
+:root{
+  --m-font-primary:'Manrope',system-ui,sans-serif;
+  --m-font-code:'JetBrains Mono','Fira Code',monospace;
+  --m-neutral-0:#FFFFFF;--m-neutral-50:#F8F9FA;--m-neutral-100:#F1F3F5;
+  --m-neutral-200:#E9ECEF;--m-neutral-300:#DEE2E6;--m-neutral-400:#ADB5BD;
+  --m-neutral-500:#868E96;--m-neutral-600:#495057;--m-neutral-700:#343A40;
+  --m-neutral-800:#212529;--m-neutral-900:#16191D;--m-neutral-950:#0D0F12;
+  --m-primary-50:#EEF2FF;--m-primary-100:#E0E7FF;--m-primary-200:#C7D2FE;
+  --m-primary-300:#A5B4FC;--m-primary-400:#818CF8;--m-primary-500:#6366F1;
+  --m-primary-600:#4F46E5;--m-primary-700:#4338CA;--m-primary-800:#3730A3;
+  --m-accent-700:#B45309;--m-accent-500:#F59E0B;--m-accent-400:#FBBF24;
+  --m-accent-100:#FEF3C7;--m-accent-50:#FFFBEB;
+  --m-success-bg:#F0FDF4;--m-success-border:#15803D;--m-success-title:#14532D;
+  --m-warning-bg:#FFF7ED;--m-warning-border:#EA580C;--m-warning-title:#9A3412;
+  --m-info-bg:#EFF6FF;--m-info-border:#2563EB;--m-info-title:#1E40AF;
+  --m-text-xs:0.6875rem;--m-text-sm:0.8125rem;--m-text-base:0.9375rem;
+  --m-text-lg:1.0625rem;--m-text-xl:1.25rem;--m-text-2xl:1.5rem;--m-text-3xl:1.875rem;
+  --m-shadow-sm:0 1px 2px rgba(0,0,0,.04);
+  --m-shadow-md:0 2px 8px rgba(0,0,0,.06);
+  --m-shadow-lg:0 4px 16px rgba(0,0,0,.08);
+  /* light defaults */
+  --bg:var(--m-neutral-50);--surface:var(--m-neutral-0);
+  --text:var(--m-neutral-800);--text-2:var(--m-neutral-600);
+  --text-3:var(--m-neutral-500);--border:var(--m-neutral-200);
+  --border-strong:var(--m-neutral-300);--primary:var(--m-primary-600);
+  --primary-soft:var(--m-primary-50);--primary-text:var(--m-primary-800);
+  --accent:var(--m-accent-700);--accent-soft:var(--m-accent-50);
+  --tab-active-bg:var(--m-neutral-0);--tab-bar:var(--m-neutral-100);
+}
+.dark{
+  --bg:var(--m-neutral-950);--surface:var(--m-neutral-900);
+  --text:var(--m-neutral-200);--text-2:var(--m-neutral-400);
+  --text-3:var(--m-neutral-500);--border:var(--m-neutral-700);
+  --border-strong:var(--m-neutral-600);--primary:var(--m-primary-400);
+  --primary-soft:#1e1b4b;--primary-text:var(--m-primary-200);
+  --accent:var(--m-accent-400);--accent-soft:#451a03;
+  --tab-active-bg:var(--m-neutral-900);--tab-bar:var(--m-neutral-950);
+  --m-shadow-sm:0 1px 2px rgba(0,0,0,.3);
+  --m-shadow-md:0 2px 8px rgba(0,0,0,.4);
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ── RESET & BASE ────────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:var(--m-font-primary);font-size:15px;
+  background:var(--bg);color:var(--text);line-height:1.6;
+  transition:background .2s,color .2s}
+
+/* ── LAYOUT ──────────────────────────────────────────────────────── */
+.shell{min-height:100vh;display:flex;flex-direction:column}
+.header{background:var(--surface);border-bottom:1px solid var(--border);
+  padding:16px 32px;display:flex;align-items:center;justify-content:space-between;
+  box-shadow:var(--m-shadow-sm);flex-shrink:0}
+.header-left{display:flex;flex-direction:column;gap:2px}
+.header-eyebrow{font-size:var(--m-text-xs);font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--accent);font-family:var(--m-font-code)}
+.header-title{font-size:var(--m-text-xl);font-weight:700;color:var(--text);
+  letter-spacing:-.02em}
+.header-sub{font-size:var(--m-text-sm);color:var(--text-2)}
+
+/* theme toggle */
+.theme-btn{display:flex;align-items:center;gap:8px;padding:8px 16px;
+  background:var(--primary-soft);border:1px solid var(--border);border-radius:8px;
+  font-family:var(--m-font-primary);font-size:var(--m-text-sm);font-weight:500;
+  color:var(--primary);cursor:pointer;transition:all .12s;min-height:44px}
+.theme-btn:hover{border-color:var(--primary);background:var(--primary-soft)}
+.theme-btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+
+/* ── TAB BAR ─────────────────────────────────────────────────────── */
+.tab-bar{background:var(--tab-bar);border-bottom:1px solid var(--border);
+  padding:0 32px;display:flex;gap:0;flex-shrink:0}
+.tab-btn{padding:14px 24px;font-family:var(--m-font-primary);font-size:var(--m-text-sm);
+  font-weight:500;color:var(--text-2);background:transparent;border:none;
+  border-bottom:2px solid transparent;cursor:pointer;transition:all .15s;
+  display:flex;align-items:center;gap:8px;min-height:44px;white-space:nowrap}
+.tab-btn:hover{color:var(--text);border-bottom-color:var(--border-strong)}
+.tab-btn.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+.tab-btn:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
+.tab-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ── CONTENT AREA ─────────────────────────────────────────────────── */
+.content{flex:1;padding:32px;overflow-y:auto}
+.tab-panel{display:none;animation:fadeIn .2s ease}
+.tab-panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── SECTION TITLE ───────────────────────────────────────────────── */
+.section-label{font-size:var(--m-text-xs);font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--text-3);font-family:var(--m-font-code);margin-bottom:20px}
+.section-title{font-size:var(--m-text-2xl);font-weight:700;letter-spacing:-.02em;
+  color:var(--text);margin-bottom:6px}
+.section-sub{font-size:var(--m-text-base);color:var(--text-2);margin-bottom:28px;
+  max-width:720px;line-height:1.6}
+
+/* ── CARDS ───────────────────────────────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:24px;box-shadow:var(--m-shadow-sm);transition:box-shadow .15s}
+.card:hover{box-shadow:var(--m-shadow-md)}
+.card-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.card-grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.card-label{font-size:var(--m-text-xs);font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;font-family:var(--m-font-code);margin-bottom:10px}
+.card-title{font-size:var(--m-text-lg);font-weight:600;letter-spacing:-.01em;
+  color:var(--text);margin-bottom:8px;line-height:1.3}
+.card-body{font-size:var(--m-text-sm);color:var(--text-2);line-height:1.6}
+
+/* accent left border */
+.card-accent-indigo{border-left:3px solid var(--m-primary-600)}
+.card-accent-amber{border-left:3px solid var(--m-accent-700)}
+.card-accent-green{border-left:3px solid var(--m-success-border)}
+.card-accent-blue{border-left:3px solid var(--m-info-border)}
+
+/* ── BADGE / PILL ─────────────────────────────────────────────────── */
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:9999px;
+  font-size:var(--m-text-xs);font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  font-family:var(--m-font-code)}
+.badge-green{background:var(--m-success-bg);color:var(--m-success-title);border:1px solid var(--m-success-border)}
+.badge-amber{background:var(--m-warning-bg);color:var(--m-warning-title);border:1px solid var(--m-warning-border)}
+.badge-indigo{background:var(--m-primary-50);color:var(--m-primary-800);border:1px solid var(--m-primary-200)}
+.badge-blue{background:var(--m-info-bg);color:var(--m-info-title);border:1px solid var(--m-info-border)}
+.dark .badge-indigo{background:var(--primary-soft);color:var(--m-primary-300);border-color:var(--m-primary-700)}
+.dark .badge-green{background:#052e16;color:#86efac;border-color:#15803d}
+.dark .badge-amber{background:#431407;color:#fdba74;border-color:#ea580c}
+.dark .badge-blue{background:#0f172a;color:#93c5fd;border-color:#2563eb}
+
+/* ── CHECK LIST ──────────────────────────────────────────────────── */
+.check-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.check-item{display:flex;gap:10px;align-items:flex-start;font-size:var(--m-text-sm);
+  color:var(--text-2);line-height:1.5}
+.check-icon{width:18px;height:18px;flex-shrink:0;margin-top:1px}
+
+/* ── CALLOUT ─────────────────────────────────────────────────────── */
+.callout{padding:16px 20px;border-radius:8px;border-left:3px solid;margin-top:20px}
+.callout-amber{background:var(--m-warning-bg);border-color:var(--m-warning-border)}
+.callout-indigo{background:var(--primary-soft);border-color:var(--primary)}
+.callout-green{background:var(--m-success-bg);border-color:var(--m-success-border)}
+.callout-label{font-size:var(--m-text-xs);font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;font-family:var(--m-font-code);margin-bottom:4px}
+.callout-amber .callout-label{color:var(--m-warning-title)}
+.callout-indigo .callout-label{color:var(--primary-text)}
+.callout-green .callout-label{color:var(--m-success-title)}
+.callout-text{font-size:var(--m-text-sm);color:var(--text);line-height:1.6}
+
+/* ── STEP ROW (Tab 2) ─────────────────────────────────────────────── */
+.step-row{display:grid;grid-template-columns:40px 1fr 1fr 1fr;
+  gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:8px}
+.step-num{background:var(--primary-soft);display:flex;align-items:center;
+  justify-content:center;font-family:var(--m-font-code);font-size:var(--m-text-sm);
+  font-weight:600;color:var(--primary);border-right:1px solid var(--border)}
+.step-cell{padding:12px 16px;font-size:var(--m-text-sm);border-right:1px solid var(--border);
+  background:var(--surface)}
+.step-cell:last-child{border-right:none}
+.step-cell .sc-label{font-size:var(--m-text-xs);font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;font-family:var(--m-font-code);color:var(--text-3);margin-bottom:4px}
+.step-cell .sc-val{font-size:var(--m-text-sm);color:var(--text-2);line-height:1.5}
+.step-cell .sc-val strong{color:var(--text);font-weight:600}
+.step-header-row{display:grid;grid-template-columns:40px 1fr 1fr 1fr;
+  gap:0;margin-bottom:4px;padding:0 0 4px}
+.step-header-row span{font-size:var(--m-text-xs);font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;font-family:var(--m-font-code);color:var(--text-3);padding:0 16px}
+.step-header-row span:first-child{padding:0 0 0 10px}
+
+/* ── USE CASE CARD (Tab 3) ────────────────────────────────────────── */
+.uc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.uc-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  overflow:hidden;box-shadow:var(--m-shadow-sm);transition:box-shadow .15s}
+.uc-card:hover{box-shadow:var(--m-shadow-md)}
+.uc-header{padding:16px 20px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.uc-vertical{font-size:var(--m-text-xs);font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;font-family:var(--m-font-code);color:var(--text-3);margin-bottom:4px}
+.uc-title{font-size:var(--m-text-base);font-weight:700;letter-spacing:-.01em;color:var(--text)}
+.uc-body{padding:16px 20px}
+.uc-row{display:grid;grid-template-columns:80px 1fr;gap:8px;margin-bottom:8px;
+  align-items:start;font-size:var(--m-text-sm)}
+.uc-row-label{font-weight:600;color:var(--text-3);font-size:var(--m-text-xs);
+  text-transform:uppercase;font-family:var(--m-font-code);letter-spacing:.04em;padding-top:2px}
+.uc-row-val{color:var(--text-2);line-height:1.5}
+.uc-gate{background:var(--m-success-bg);border-top:1px solid var(--border);
+  padding:10px 20px;display:flex;align-items:center;gap:8px;
+  font-size:var(--m-text-xs);color:var(--m-success-title)}
+.dark .uc-gate{background:#052e16;color:#86efac}
+.uc-gate svg{flex-shrink:0}
+
+/* ── WHAT'S NEW — feature cards (Tab 1) ──────────────────────────── */
+.feature-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
+.fc{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:20px;box-shadow:var(--m-shadow-sm);display:flex;flex-direction:column;gap:10px}
+.fc-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0}
+.fc-icon-indigo{background:var(--m-primary-50)}
+.fc-icon-amber{background:var(--m-accent-50)}
+.fc-icon-green{background:var(--m-success-bg)}
+.dark .fc-icon-indigo{background:var(--primary-soft)}
+.dark .fc-icon-amber{background:#451a03}
+.dark .fc-icon-green{background:#052e16}
+.fc-label{font-size:var(--m-text-xs);font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;font-family:var(--m-font-code);color:var(--text-3)}
+.fc-title{font-size:var(--m-text-base);font-weight:700;color:var(--text);
+  letter-spacing:-.01em;line-height:1.3}
+.fc-body{font-size:var(--m-text-sm);color:var(--text-2);line-height:1.55;flex:1}
+.fc-footer{display:flex;align-items:center;justify-content:space-between;
+  padding-top:10px;border-top:1px solid var(--border);margin-top:auto}
+.fc-unlocks{font-size:var(--m-text-xs);color:var(--text-3)}
+.fc-unlocks strong{color:var(--accent);font-weight:600}
+
+/* ── FOOTER ──────────────────────────────────────────────────────── */
+.footer{padding:12px 32px;border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+  background:var(--surface)}
+.footer-left{font-size:var(--m-text-xs);color:var(--text-3);font-family:var(--m-font-code)}
+.footer-right{font-size:var(--m-text-xs);color:var(--text-3)}
+
+/* ── DIVIDER ─────────────────────────────────────────────────────── */
+.divider{height:1px;background:var(--border);margin:24px 0}
+
+/* ── RESPONSIVE ──────────────────────────────────────────────────── */
+@media(max-width:900px){
+  .feature-cards{grid-template-columns:1fr}
+  .card-grid-3{grid-template-columns:1fr}
+  .uc-grid{grid-template-columns:1fr}
+  .step-row{grid-template-columns:36px 1fr}
+  .step-cell:nth-child(3),.step-cell:nth-child(4){display:none}
+  .step-header-row span:nth-child(3),.step-header-row span:nth-child(4){display:none}
+}
+</style>
+</head>
+<body>
+<div class="shell" id="app">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <span class="header-eyebrow">Microsoft Fabric · Semantic Layer</span>
+      <span class="header-title">Data Prep for AI</span>
+      <span class="header-sub">What's new, how to get ready, and what it unlocks for this client</span>
+    </div>
+    <button class="theme-btn" id="themeBtn" aria-label="Toggle theme">
+      <svg id="themeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+      </svg>
+      <span id="themeLabel">Dark mode</span>
+    </button>
+  </header>
+
+  <!-- TAB BAR -->
+  <nav class="tab-bar" role="tablist">
+    <button class="tab-btn active" role="tab" aria-selected="true" data-tab="latest">
+      <span class="tab-dot" style="background:#4F46E5"></span>
+      What's New in Fabric
+    </button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="practices">
+      <span class="tab-dot" style="background:#B45309"></span>
+      How to Get AI-Ready
+    </button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="usecases">
+      <span class="tab-dot" style="background:#15803D"></span>
+      Use Cases for This Client
+    </button>
+  </nav>
+
+  <!-- CONTENT -->
+  <main class="content">
+
+    <!-- ══ TAB 1: WHAT'S NEW ══════════════════════════════════════ -->
+    <div class="tab-panel active" id="tab-latest" role="tabpanel">
+      <div class="section-label">Latest · March 2026</div>
+      <h1 class="section-title">Four capabilities that changed what's possible</h1>
+      <p class="section-sub">Microsoft Fabric's semantic layer has moved from a reporting tool to an AI execution surface. These are the capabilities that matter for regulated-industry clients right now.</p>
+
+      <div class="feature-cards">
+
+        <!-- CARD 1 -->
+        <div class="fc">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="fc-icon fc-icon-indigo">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.5">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <span class="badge badge-green">GA · Nov 2025</span>
+          </div>
+          <div class="fc-label">Prep Data for AI</div>
+          <div class="fc-title">Three-part semantic enrichment for AI agents</div>
+          <div class="fc-body">The semantic model now has a dedicated AI configuration surface with three components: an <strong>AI Data Schema</strong> that scopes which tables and columns the AI can see; <strong>Verified Answers</strong> that pin specific questions to pre-approved visuals; and <strong>AI Instructions</strong> that act as a system prompt for the model. All three configurations are automatically honored by Fabric Data Agents and Copilot — configure once, both benefit.</div>
+          <div class="fc-footer">
+            <span class="fc-unlocks">Unlocks: <strong>Copilot + Data Agent accuracy</strong></span>
+            <span class="badge badge-indigo">Semantic Model</span>
+          </div>
+        </div>
+
+        <!-- CARD 2 -->
+        <div class="fc">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="fc-icon fc-icon-amber">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+              </svg>
+            </div>
+            <span class="badge badge-green">GA · Nov 2025</span>
+          </div>
+          <div class="fc-label">Fabric Data Agent</div>
+          <div class="fc-title">Natural language to SQL, DAX, and KQL — governed</div>
+          <div class="fc-body">Data Agents (formerly AI Skills) convert plain-English questions into native queries across lakehouses, warehouses, eventhouses, and semantic models. Critically for regulated clients: <strong>permissions set in the data platform are fully enforced</strong> — the agent cannot return data the user cannot see directly. Now supports SQL database artifacts directly, eliminating intermediate lakehouse steps. Instruction character limits expanded to 15,000 for complex domain models.</div>
+          <div class="fc-footer">
+            <span class="fc-unlocks">Unlocks: <strong>Self-service without PHI exposure</strong></span>
+            <span class="badge badge-indigo">Data Agent</span>
+          </div>
+        </div>
+
+        <!-- CARD 3 -->
+        <div class="fc">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="fc-icon fc-icon-green">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="1.5">
+                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </div>
+            <span class="badge badge-green">GA · March 2026</span>
+          </div>
+          <div class="fc-label">Purview + Fabric Integration</div>
+          <div class="fc-title">Unified security and governance at the semantic layer</div>
+          <div class="fc-body">New Purview innovations announced March 2026 prevent data oversharing specifically within AI retrieval scenarios. Sensitivity labels now flow from the semantic model into every agent response, Copilot output, and exported artifact. <strong>AI-generated answers inherit the classification of the data used to produce them</strong> — a critical control for HIPAA and PCI DSS environments where outputs are as regulated as inputs.</div>
+          <div class="fc-footer">
+            <span class="fc-unlocks">Unlocks: <strong>Compliant AI output, not just compliant data</strong></span>
+            <span class="badge badge-indigo">Governance</span>
+          </div>
+        </div>
+
+        <!-- CARD 4 -->
+        <div class="fc">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="fc-icon fc-icon-indigo">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.5">
+                <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+              </svg>
+            </div>
+            <span class="badge badge-amber">Preview · FabCon 2026</span>
+          </div>
+          <div class="fc-label">Fabric IQ</div>
+          <div class="fc-title">Semantic intelligence layer across the entire platform</div>
+          <div class="fc-body">Announced at FabCon 2026 (March 2026), Fabric IQ introduces a shared semantic intelligence surface that allows AI agents to reason across structured and unstructured data simultaneously. Alongside this, <strong>Fabric Data Agents reached GA at FabCon 2026</strong> — confirming the agent pattern as the primary enterprise AI interface for Fabric. Model Context Protocol (MCP) support means AI agents can now be composed into larger orchestration flows without custom integration work.</div>
+          <div class="fc-footer">
+            <span class="fc-unlocks">Unlocks: <strong>Cross-data-type reasoning at enterprise scale</strong></span>
+            <span class="badge badge-amber">Preview</span>
+          </div>
+        </div>
+
+        <!-- CARD 5 -->
+        <div class="fc" style="grid-column:span 2">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+            <div>
+              <div class="fc-label" style="margin-bottom:6px">Why this matters for regulated clients</div>
+              <div class="fc-title">The semantic layer is now the AI security perimeter</div>
+            </div>
+            <span class="badge badge-blue">Strategic shift</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:12px">
+            <div style="padding:14px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">
+              <div style="font-size:var(--m-text-xs);font-weight:600;font-family:var(--m-font-code);text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-bottom:6px">Before</div>
+              <div style="font-size:var(--m-text-sm);color:var(--text-2);line-height:1.5">AI queries bypassed semantic model controls. Security was applied at the reporting layer only. AI could return data users couldn't see in reports.</div>
+            </div>
+            <div style="padding:14px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">
+              <div style="font-size:var(--m-text-xs);font-weight:600;font-family:var(--m-font-code);text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-bottom:6px">Now</div>
+              <div style="font-size:var(--m-text-sm);color:var(--text-2);line-height:1.5">RLS, CLS, sensitivity labels, and Purview access policies are all enforced at the agent query layer. Security travels with the data through to the AI response.</div>
+            </div>
+            <div style="padding:14px;background:var(--primary-soft);border-radius:8px;border:1px solid var(--m-primary-200)">
+              <div class="dark" style="display:none"></div>
+              <div style="font-size:var(--m-text-xs);font-weight:600;font-family:var(--m-font-code);text-transform:uppercase;letter-spacing:.04em;color:var(--m-primary-800);margin-bottom:6px">Implication</div>
+              <div style="font-size:var(--m-text-sm);color:var(--m-primary-700);line-height:1.5">The semantic model is no longer just a reporting optimization. It is the governed, classified, access-controlled interface for all AI workloads.</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /feature-cards -->
+
+      <div class="callout callout-amber">
+        <div class="callout-label">Verify before the workshop</div>
+        <div class="callout-text">Verified Answers in Prep for AI is not available in DirectLake mode — only Import and DirectQuery. Confirm the client's intended connection mode before promising this capability. FabCon 2026 GA of Data Agents supersedes any earlier "preview" caveats in your documentation.</div>
+      </div>
+
+    </div><!-- /tab-latest -->
+
+    <!-- ══ TAB 2: HOW TO GET AI-READY ════════════════════════════ -->
+    <div class="tab-panel" id="tab-practices" role="tabpanel">
+      <div class="section-label">Best Practices</div>
+      <h1 class="section-title">How to get data ready for AI workloads</h1>
+      <p class="section-sub">Structured as a sequence. Each row is a distinct practice area with the action required, the critical rule to enforce, and the failure mode if skipped. Applicable to semantic models, lakehouses, and agent configurations.</p>
+
+      <div class="step-header-row">
+        <span></span>
+        <span>Practice Area</span>
+        <span>Critical Rule</span>
+        <span>Failure Mode if Skipped</span>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num">01</div>
+        <div class="step-cell">
+          <div class="sc-label">Schema Design</div>
+          <div class="sc-val"><strong>Use business-friendly names everywhere.</strong> Tables named by action (e.g. ClaimSubmissions, MemberEnrollment). Columns spelled out fully. Acronyms removed. Units explicit.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">Rule</div>
+          <div class="sc-val">The AI queries metadata, not data. If the name is ambiguous, the DAX generation tool will choose incorrectly — silently.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">If Skipped</div>
+          <div class="sc-val">Agent returns plausible but wrong answers. Users trust them. Trust is harder to rebuild than it was to build.</div>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num">02</div>
+        <div class="step-cell">
+          <div class="sc-label">AI Data Schema</div>
+          <div class="sc-val"><strong>Scope the AI schema to the minimum required tables.</strong> Exclude lookup-only tables, system columns, foreign keys, and any column not needed to answer business questions.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">Rule</div>
+          <div class="sc-val">Smaller, precise schema = higher accuracy and lower latency. A scoped schema also limits the AI's blast radius if it misinterprets a query.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">If Skipped</div>
+          <div class="sc-val">AI picks the wrong column when similar names exist. Ambiguity in large models causes hallucinated joins and incorrect aggregations.</div>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num">03</div>
+        <div class="step-cell">
+          <div class="sc-label">Table &amp; Column Descriptions</div>
+          <div class="sc-val"><strong>Write plain-language descriptions for every table and measure in scope.</strong> Define what the table represents, its grain, how it relates to other domains, and any business rules embedded in it.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">Rule</div>
+          <div class="sc-val">Descriptions are the system prompt for the data model. Investing here benefits Copilot, Data Agent, and all future AI surfaces simultaneously.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">If Skipped</div>
+          <div class="sc-val">AI cannot distinguish between similarly named tables (e.g. Claims vs ClaimAdjustments). Response quality degrades proportionally to model complexity.</div>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num">04</div>
+        <div class="step-cell">
+          <div class="sc-label">AI Instructions</div>
+          <div class="sc-val"><strong>Write domain-specific AI instructions before connecting the agent.</strong> Define: which tables answer which question types, how to handle ambiguous terminology, what to do when data is insufficient.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">Rule</div>
+          <div class="sc-val">Instructions added at the agent level do not override semantic model instructions for DAX generation. Always configure Prep for AI in the semantic model first.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">If Skipped</div>
+          <div class="sc-val">Agent routes financial metric questions to raw lakehouse tables instead of the governed semantic model. Unaudited answers reach business users.</div>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num">05</div>
+        <div class="step-cell">
+          <div class="sc-label">Verified Answers</div>
+          <div class="sc-val"><strong>Pin the 10–15 most critical questions to pre-approved visuals.</strong> These are the questions compliance officers, executives, or auditors will ask. Verified answers guarantee the response is human-approved.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">Rule</div>
+          <div class="sc-val">Use complete question phrases as triggers — not partial keywords. Verified Answers require Import or DirectQuery mode. Not available in DirectLake.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">If Skipped</div>
+          <div class="sc-val">The agent improvises answers to high-stakes questions. In regulated contexts, an improvised answer to "what is our current HIPAA compliance status" is a liability event.</div>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num">06</div>
+        <div class="step-cell">
+          <div class="sc-label">Access &amp; Security Alignment</div>
+          <div class="sc-val"><strong>Align agent data source permissions to the same role structure as the semantic model.</strong> Test each role explicitly — verify the agent cannot return data the role cannot see in a report.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">Rule</div>
+          <div class="sc-val">When adding a semantic model to a Data Agent, share access to underlying data sources explicitly — it is not inherited automatically from report permissions.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">If Skipped</div>
+          <div class="sc-val">Users gain data access through the AI surface that they don't have through the reporting surface. This is a HIPAA and PCI DSS violation, not a UX problem.</div>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num">07</div>
+        <div class="step-cell">
+          <div class="sc-label">Time Intelligence &amp; Measures</div>
+          <div class="sc-val"><strong>Add pre-built time intelligence measures</strong> — year-over-year, month-over-month, rolling averages — before enabling AI. Without them, the agent describes change but cannot explain it.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">Rule</div>
+          <div class="sc-val">Copilot and Data Agents cannot infer trend analysis from raw date columns. The measure must exist in the model for the AI to use it correctly.</div>
+        </div>
+        <div class="step-cell">
+          <div class="sc-label">If Skipped</div>
+          <div class="sc-val">Executives ask "why did claims volume drop in Q3?" and the agent returns the Q3 number without context. The answer is technically correct and operationally useless.</div>
+        </div>
+      </div>
+
+      <div class="callout callout-indigo" style="margin-top:20px">
+        <div class="callout-label">Sequencing principle</div>
+        <div class="callout-text">Steps 01–03 are prerequisites for Steps 04–07. There is no shortcut: AI Instructions and Verified Answers built on poorly named, poorly scoped, undescribed tables produce unpredictable responses at exactly the moments when predictability matters most.</div>
+      </div>
+
+    </div><!-- /tab-practices -->
+
+    <!-- ══ TAB 3: USE CASES ═══════════════════════════════════════ -->
+    <div class="tab-panel" id="tab-usecases" role="tabpanel">
+      <div class="section-label">Healthcare &amp; Financial Services · This Client</div>
+      <h1 class="section-title">Four AI use cases — anchored to their three pain points</h1>
+      <p class="section-sub">Each use case maps to a confirmed client pain point. The readiness gate at the bottom of each card is the data work that must be done before the AI layer is credible.</p>
+
+      <div class="uc-grid">
+
+        <!-- UC 1 -->
+        <div class="uc-card">
+          <div class="uc-header">
+            <div>
+              <div class="uc-vertical">Healthcare · Pain Point 03</div>
+              <div class="uc-title">Clinical Document Q&amp;A Agent</div>
+            </div>
+            <span class="badge badge-green">GA</span>
+          </div>
+          <div class="uc-body">
+            <div class="uc-row">
+              <div class="uc-row-label">Problem</div>
+              <div class="uc-row-val">Clinicians cannot find answers across EHR notes, discharge summaries, and policy documents. Queries go to IT. Turnaround is days.</div>
+            </div>
+            <div class="uc-row">
+              <div class="uc-row-label">How it works</div>
+              <div class="uc-row-val">Fabric Data Agent connects to a governed semantic model of curated clinical data. Users ask in plain language. Purview sensitivity labels control what each role can retrieve. Responses cite source documents.</div>
+            </div>
+            <div class="uc-row">
+              <div class="uc-row-label">AI data prep</div>
+              <div class="uc-row-val">AI Data Schema scoped to patient-safe columns only. AI Instructions define PHI boundaries — agent refuses queries that would surface direct identifiers. Verified Answers for the 10 most common compliance queries.</div>
+            </div>
+            <div class="uc-row">
+              <div class="uc-row-label">Outcome</div>
+              <div class="uc-row-val">Hours → seconds. PHI stays classified. Full audit trail on every retrieval. HIPAA-defensible by design.</div>
+            </div>
+          </div>
+          <div class="uc-gate">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <strong>Readiness gate:</strong>&nbsp;PHI masked in Silver · Labels enforced · DQ ≥95% on clinical domain
+          </div>
+        </div>
+
+        <!-- UC 2 -->
+        <div class="uc-card">
+          <div class="uc-header">
+            <div>
+              <div class="uc-vertical">Financial Services · Pain Point 01</div>
+              <div class="uc-title">Real-Time Fraud &amp; Risk Scoring</div>
+            </div>
+            <span class="badge badge-green">GA</span>
+          </div>
+          <div class="uc-body">
+            <div class="uc-row">
+              <div class="uc-row-label">Problem</div>
+              <div class="uc-row-val">Fraud detection is batch-based with 24-hour lag. By the time patterns are identified, exposure has already occurred and chargebacks are mounting.</div>
+            </div>
+            <div class="uc-row">
+              <div class="uc-row-label">How it works</div>
+              <div class="uc-row-val">Streaming ingestion feeds a predictive model that scores each transaction in near real-time. Data Activator triggers automated holds below a configurable risk threshold. Risk analysts query the semantic model via Data Agent for investigation context.</div>
+            </div>
+            <div class="uc-row">
+              <div class="uc-row-label">AI data prep</div>
+              <div class="uc-row-val">Semantic model includes pre-built measures for velocity, behavioral baseline, and anomaly score. AI Instructions route fraud-pattern questions to the analytical model and raw transaction questions to the lakehouse. Time intelligence measures allow trend queries.</div>
+            </div>
+            <div class="uc-row">
+              <div class="uc-row-label">Outcome</div>
+              <div class="uc-row-val">Detection latency drops dramatically. PCI DSS audit trail automated. Analysts get investigation context in natural language without raw data access.</div>
+            </div>
+          </div>
+          <div class="uc-gate">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <strong>Readiness gate:</strong>&nbsp;Cardholder data scoped · Streaming topology defined · Latency SLA agreed
+          </div>
+        </div>
+
+        <!-- UC 3 -->
+        <div class="uc-card">
+          <div class="uc-header">
+            <div>
+              <div class="uc-vertical">Cross-Vertical · Pain Point 02</div>
+              <div class="uc-title">Compliant Self-Service BI with Copilot</div>
+            </div>
+            <span class="badge badge-green">GA</span>
+          </div>
+          <div class="uc-body">
+            <div class="uc-row">
+              <div class="uc-row-label">Problem</div>
+              <div class="uc-row-val">Business users cannot access regulated data directly. Every report request goes to IT with a two-week turnaround. Analysts are a bottleneck, not an asset.</div>
+            </div>
+            <div class="uc-row">
+              <div class="uc-row-label">How it works</div>
+              <div class="uc-row-val">DirectLake semantic model with RLS enforced at the model layer. Copilot answers natural language questions against the model. Row-level filters ensure each user sees only their authorized population. Sensitivity labels propagate to every Copilot-generated export.</div>
+            </div>
+            <div class="uc-row">
+              <div class="uc-row-label">AI data prep</div>
+              <div class="uc-row-val">Verified Answers configured for the top 15 executive and compliance questions. AI Instructions distinguish between "member count" (claims-based) and "enrolled members" (eligibility-based) — a common source of conflicting numbers that breaks trust.</div>
+            </div>
+            <div class="uc-row">
+              <div class="uc-row-label">Outcome</div>
+              <div class="uc-row-val">Analysts become self-sufficient. IT is unblocked. PHI is never exposed. Every AI-generated answer is audit-logged.</div>
+            </div>
+          </div>
+          <div class="uc-gate">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <strong>Readiness gate:</strong>&nbsp;Single semantic model per domain · RLS tested per role · Business glossary agreed
+          </div>
+        </div>
+
+        <!-- UC 4 -->
+        <div class="uc-card">
+          <div class="uc-header">
+            <div>
+              <div class="uc-vertical">Cross-Vertical · Pain Point 01 + 03</div>
+              <div class="uc-title">Internal Operations Copilot</div>
+            </div>
+            <span class="badge badge-amber">Preview → GA FabCon 2026</span>
+          </div>
+          <div class="uc-body">
+            <div class="uc-row">
+              <div class="uc-row-label">Problem</div>
+              <div class="uc-row-val">Internal teams — compliance, finance, operations — spend hours building one-off data extracts for recurring questions. No single source of truth they can query themselves.</div>
+            </div>
+            <div class="uc-row">
+              <div class="uc-row-label">How it works</div>
+              <div class="uc-row-val">Multi-source Data Agent connects to the governed semantic model (structured metrics) and a document knowledge base (policies, contracts, SOPs). Teams ask in natural language. Agent routes to the right source based on question type. Responses include citations.</div>
+            </div>
+            <div class="uc-row">
+              <div class="uc-row-label">AI data prep</div>
+              <div class="uc-row-val">AI Instructions partition the agent: financial metric questions → semantic model, policy questions → document store, operational questions → lakehouse. Example queries provided for each partition so the agent generalizes correctly to similar questions.</div>
+            </div>
+            <div class="uc-row">
+              <div class="uc-row-label">Outcome</div>
+              <div class="uc-row-val">Compliance teams self-serve audit evidence. Finance teams get consistent metric definitions. Operations teams resolve issues without IT dependency.</div>
+            </div>
+          </div>
+          <div class="uc-gate">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <strong>Readiness gate:</strong>&nbsp;Document corpus curated + labeled · Agent scope defined · Data Agent GA confirmed
+          </div>
+        </div>
+
+      </div><!-- /uc-grid -->
+
+      <div class="callout callout-green" style="margin-top:20px">
+        <div class="callout-label">The sequencing reality</div>
+        <div class="callout-text">All four use cases share the same semantic model foundation. Use Cases 2 and 4 can begin scoping immediately — they have the clearest latency SLA and scope boundary. Use Case 1 requires PHI masking in Silver to be complete first. Use Case 3 requires the business glossary conflict (member count definitions) to be resolved before Verified Answers can be configured. Don't attempt all four simultaneously — the foundation work is not parallelizable.</div>
+      </div>
+
+    </div><!-- /tab-usecases -->
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <span class="footer-left">Built for scale by Prasanth Sistla</span>
+    <span class="footer-right">Slalom · Microsoft Partnership · March 2026 · Confidential</span>
+  </footer>
+
+</div><!-- /shell -->
+
+<script>
+// ── THEME TOGGLE ─────────────────────────────────────────────────
+const app = document.getElementById('app');
+const btn = document.getElementById('themeBtn');
+const icon = document.getElementById('themeIcon');
+const label = document.getElementById('themeLabel');
+let dark = false;
+
+const moonSVG = `<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>`;
+const sunSVG = `<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>`;
+
+btn.addEventListener('click', () => {
+  dark = !dark;
+  dark ? app.classList.add('dark') : app.classList.remove('dark');
+  icon.innerHTML = dark ? moonSVG : sunSVG;
+  label.textContent = dark ? 'Light mode' : 'Dark mode';
+});
+
+// ── TAB SWITCHING ─────────────────────────────────────────────────
+const tabs = document.querySelectorAll('.tab-btn');
+const panels = document.querySelectorAll('.tab-panel');
+
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.tab;
+    tabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
+    panels.forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    tab.setAttribute('aria-selected','true');
+    document.getElementById('tab-' + target).classList.add('active');
+  });
+});
+
+// keyboard nav
+document.querySelector('.tab-bar').addEventListener('keydown', e => {
+  const active = document.querySelector('.tab-btn.active');
+  const all = [...tabs];
+  const idx = all.indexOf(active);
+  if(e.key === 'ArrowRight') all[(idx+1)%all.length].click();
+  if(e.key === 'ArrowLeft') all[(idx-1+all.length)%all.length].click();
+});
+</script>
+</body>
+</html>
