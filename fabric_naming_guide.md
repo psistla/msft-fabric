@@ -24,11 +24,14 @@ This guide establishes comprehensive naming standards for Microsoft Fabric Data 
 ## Foundation Principles
 
 ### 1. Universal Constraints
-Based on the most restrictive Fabric artifacts (Lakehouses), all naming conventions must adhere to:
+Based on the most restrictive Fabric items (Lakehouses), all naming conventions must adhere to:
 - **Alphanumeric characters and underscores only**
 - **First character must be a letter**
 - **No spaces or special characters (except underscore)**
+- **Maximum length of 123 characters** (the Lakehouse limit; other items and workspaces allow more, but standardizing on the most restrictive keeps names portable)
 - **Case considerations**: Use consistent casing (recommended: lowercase with proper noun capitalization)
+
+> **Note on constraint scope**: Lakehouses (and their SQL analytics endpoints/default semantic models) enforce the letter-first, alphanumeric-and-underscore-only rule. Workspaces and most other Fabric items (for example, Warehouses, Notebooks, Data Pipelines, Reports) permit spaces and a broader character set. This standard deliberately adopts the Lakehouse rules everywhere so that a single naming scheme works across every item type.
 
 ### 2. Core Philosophy
 - **Descriptive**: Names should clearly indicate purpose and content
@@ -45,38 +48,43 @@ Based on the most restrictive Fabric artifacts (Lakehouses), all naming conventi
 
 ### Component Definitions
 
-#### Experience Prefixes
-| Experience | Abbreviation | Description |
-|------------|--------------|-------------|
+#### Workload (Experience) Prefixes
+| Workload | Abbreviation | Description |
+|----------|--------------|-------------|
 | Power BI | PBI | Business intelligence and reporting |
 | Data Factory | DF | Data integration and orchestration |
-| Synapse Data Engineering | DE | Big data processing and engineering |
-| Synapse Data Science | DS | Machine learning and analytics |
-| Synapse Data Warehouse | DW | Enterprise data warehousing |
-| Synapse Real-Time Analytics | RTA | Streaming and real-time analytics |
-| Data Activator | DA | Event-driven automation |
+| Data Engineering | DE | Big data processing and engineering |
+| Data Science | DS | Machine learning and analytics |
+| Data Warehouse | DW | Enterprise data warehousing |
+| Real-Time Intelligence | RTI | Streaming and real-time analytics (formerly Real-Time Analytics) |
+| Activator | ACT | Event-driven automation (formerly Data Activator) |
 
-#### Artifact Type Abbreviations
-| Experience | Artifact | Abbreviation |
-|------------|----------|--------------|
-| **Power BI** | Dataset | DS |
-| | Dataflow | DFL |
+> **Terminology note (2026)**: Microsoft dropped the "Synapse" branding from the Data Engineering, Data Science, and Data Warehouse workloads, and renamed "Real-Time Analytics" to **Real-Time Intelligence** and "Data Activator" to **Activator**. Prefixes above reflect current workload names. Databases (SQL database, Cosmos DB in Fabric) and Industry Solutions are additional Fabric workloads; add prefixes for them as your organization adopts those items.
+
+#### Item (Artifact) Type Abbreviations
+| Workload | Item | Abbreviation |
+|----------|------|--------------|
+| **Power BI** | Semantic Model | SM |
+| | Dataflow Gen1 | DFG1 |
 | | Datamart | DM |
 | | Report | RPT |
 | | Dashboard | DASH |
 | | Paginated Report | PRPT |
-| **Data Factory** | Pipeline | PL |
-| | Dataflow Gen2 | DFL |
+| **Data Factory** | Data Pipeline | PL |
+| | Dataflow Gen2 | DFG2 |
 | **Data Engineering** | Lakehouse | LH |
 | | Notebook | NB |
 | | Spark Job Definition | SJ |
-| **Data Science** | Model | MDL |
+| **Data Science** | ML Model | MDL |
 | | Experiment | EXP |
 | | Notebook | NB |
 | **Data Warehouse** | Warehouse | WH |
-| **Real-Time Analytics** | KQL Database | DB |
+| **Real-Time Intelligence** | Eventhouse | EH |
+| | KQL Database | DB |
 | | KQL Queryset | QS |
 | | Eventstream | ES |
+
+> **Abbreviation disambiguation**: `DS` is reserved exclusively for the **Data Science** workload prefix. The former Power BI "Dataset" item is now the **Semantic Model** (`SM`), so there is no longer a `DS` collision. "Dataflow" is split into **Dataflow Gen2** (`DFG2`, Data Factory) and **Dataflow Gen1** (`DFG1`, Power BI) to remove the previous `DFL` collision.
 
 #### Index Numbering
 - **Purpose**: Control execution order and logical grouping
@@ -129,12 +137,12 @@ DF_PL_{Index}_{Stage}_{SourceToTarget}_{ProcessType}
 
 #### Dataflow Gen2 Naming
 ```
-DF_DFL_{Index}_{Stage}_{DataDomain}_{Transformation}
+DF_DFG2_{Index}_{Stage}_{DataDomain}_{Transformation}
 ```
 
 **Examples:**
-- `DF_DFL_100_BRONZE_Customer_Cleansing`
-- `DF_DFL_200_SILVER_Product_Enrichment`
+- `DF_DFG2_100_BRONZE_Customer_Cleansing`
+- `DF_DFG2_200_SILVER_Product_Enrichment`
 
 ### Data Engineering Workload
 
@@ -224,60 +232,70 @@ DS_NB_{UseCase}_{Purpose}_{Version}
 - `DS_NB_PricePrediction_HyperparameterTuning_V2`
 - `DS_NB_FraudDetection_ModelTraining_V1`
 
-### Real-Time Analytics Workload
+### Real-Time Intelligence Workload
+
+#### Eventhouse Naming
+An Eventhouse is a container that can hold multiple KQL databases. Name the Eventhouse for the business area or solution it serves, then name individual KQL databases within it.
+```
+RTI_EH_{BusinessDomain}_{Purpose}_{Region}
+```
+
+**Examples:**
+- `RTI_EH_IoTPlatform_Monitoring_EastUS`
+- `RTI_EH_WebAnalytics_Observability_WestEU`
 
 #### KQL Database Naming
 ```
-RTA_DB_{DataSource}_{Purpose}_{Region}
+RTI_DB_{DataSource}_{Purpose}_{Region}
 ```
 
 **Examples:**
-- `RTA_DB_IoTSensors_Monitoring_EastUS`
-- `RTA_DB_WebLogs_Analytics_WestEU`
-- `RTA_DB_AppTelemetry_Observability_CentralUS`
+- `RTI_DB_IoTSensors_Monitoring_EastUS`
+- `RTI_DB_WebLogs_Analytics_WestEU`
+- `RTI_DB_AppTelemetry_Observability_CentralUS`
 
 #### Eventstream Naming
 ```
-RTA_ES_{Source}_{Destination}_{EventType}
+RTI_ES_{Source}_{Destination}_{EventType}
 ```
 
 **Examples:**
-- `RTA_ES_IoTHub_KQLDatabase_SensorData`
-- `RTA_ES_EventHub_Lakehouse_WebEvents`
-- `RTA_ES_ServiceBus_Warehouse_TransactionData`
+- `RTI_ES_IoTHub_KQLDatabase_SensorData`
+- `RTI_ES_EventHub_Lakehouse_WebEvents`
+- `RTI_ES_ServiceBus_Warehouse_TransactionData`
 
 #### KQL Queryset Naming
 ```
-RTA_QS_{BusinessDomain}_{AnalysisType}_{Purpose}
+RTI_QS_{BusinessDomain}_{AnalysisType}_{Purpose}
 ```
 
 **Examples:**
-- `RTA_QS_Operations_Performance_Monitoring`
-- `RTA_QS_Security_Threat_Detection`
-- `RTA_QS_Business_Customer_Analytics`
+- `RTI_QS_Operations_Performance_Monitoring`
+- `RTI_QS_Security_Threat_Detection`
+- `RTI_QS_Business_Customer_Analytics`
 
 ### Power BI Workload
 
-#### Dataset Naming
-For enterprise/shared datasets:
+#### Semantic Model Naming
+For enterprise/shared semantic models (formerly called datasets):
 ```
-PBI_DS_{BusinessDomain}_{DataGranularity}
-```
-
-**Examples:**
-- `PBI_DS_Sales_Daily`
-- `PBI_DS_Finance_Monthly`
-- `PBI_DS_Operations_Realtime`
-
-#### Dataflow Naming
-```
-PBI_DFL_{BusinessDomain}_{Purpose}_{RefreshFrequency}
+PBI_SM_{BusinessDomain}_{DataGranularity}
 ```
 
 **Examples:**
-- `PBI_DFL_Sales_CustomerMaster_Daily`
-- `PBI_DFL_Finance_BudgetData_Monthly`
-- `PBI_DFL_HR_EmployeeData_Weekly`
+- `PBI_SM_Sales_Daily`
+- `PBI_SM_Finance_Monthly`
+- `PBI_SM_Operations_Realtime`
+
+#### Dataflow Gen1 Naming
+```
+PBI_DFG1_{BusinessDomain}_{Purpose}_{RefreshFrequency}
+```
+
+**Examples:**
+- `PBI_DFG1_Sales_CustomerMaster_Daily`
+- `PBI_DFG1_Finance_BudgetData_Monthly`
+- `PBI_DFG1_HR_EmployeeData_Weekly`
 
 #### Report and Dashboard Naming
 Business-friendly names without technical prefixes:
@@ -318,7 +336,7 @@ Business-friendly names without technical prefixes:
 #### Analytics Team
 - Apply standards to warehouse and BI artifacts
 - Balance technical naming with business usability
-- Maintain report and dataset naming consistency
+- Maintain report and semantic model naming consistency
 
 #### Data Factory Team
 - Implement pipeline and dataflow naming standards
@@ -404,11 +422,12 @@ DS_NB_CustomerLifetimeValue_ModelTraining_V1
 DS_MDL_CustomerLifetimeValue_XGB_V1
 ```
 
-#### Real-Time Analytics Solution
+#### Real-Time Intelligence Solution
 ```
-RTA_ES_WebEvents_KQLDatabase_ClickStream
-RTA_DB_UserBehavior_Analytics_EastUS
-RTA_QS_Marketing_UserJourney_Analysis
+RTI_EH_UserBehavior_Analytics_EastUS
+RTI_ES_WebEvents_KQLDatabase_ClickStream
+RTI_DB_UserBehavior_Analytics_EastUS
+RTI_QS_Marketing_UserJourney_Analysis
 ```
 
 ### Naming Templates
@@ -449,4 +468,4 @@ This comprehensive naming standards guide provides the foundation for consistent
 
 ---
 
-*This guide is based on Microsoft Learn documentation, Azure Cloud Adoption Framework best practices, and industry-verified implementations as of May 2025.*
+*This guide is based on Microsoft Learn documentation, Azure Cloud Adoption Framework best practices, and industry-verified implementations. Last reviewed and updated against current Microsoft Fabric terminology in July 2026 (workloads de-branded from "Synapse"; Real-Time Analytics renamed to Real-Time Intelligence; Data Activator renamed to Activator; Power BI datasets renamed to semantic models).*

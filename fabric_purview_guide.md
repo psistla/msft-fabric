@@ -9,7 +9,7 @@ Microsoft Purview extends Microsoft Fabric's native security capabilities by pro
 ### Unified Data Governance Platform
 Microsoft Purview is a family of data governance, risk, and compliance solutions that includes:
 - **Risk and Compliance Solutions**: Microsoft 365 compliance capabilities
-- **Unified Data Governance Solutions**: Azure Purview data governance capabilities
+- **Unified Data Governance Solutions**: Microsoft Purview data governance, delivered through two solutions — the **Data Map** and the **Unified Catalog** (the former standalone "Azure Purview" governance portal has been consolidated into the unified Microsoft Purview portal)
 - **Cross-Platform Coverage**: Microsoft 365, on-premises, multicloud, and SaaS data services
 
 ### Integration Benefits
@@ -23,12 +23,13 @@ With Microsoft Purview and Microsoft Fabric together, organizations can:
 
 ## 2. Core Purview Integration Components
 
-### Microsoft Purview Unified Catalog
+### Microsoft Purview Unified Catalog and Data Map
 **Automatic Metadata Discovery**:
 - Automatically view metadata about Microsoft Fabric items in the Microsoft Purview Unified Catalog
-- Live view integration for real-time visibility
-- Support for same-tenant and cross-tenant catalog connections
+- Live view integration for real-time visibility (same-tenant scenarios)
+- Support for same-tenant and cross-tenant catalog connections (registered/scanned via the Data Map)
 - Complete data lineage from source to Power BI reports
+- Publication workflows for data products and glossary terms; data quality checks can be applied to ungoverned Fabric assets
 
 **Data Asset Management**:
 - Centralized catalog of all Fabric assets
@@ -40,8 +41,9 @@ With Microsoft Purview and Microsoft Fabric together, organizations can:
 **Sensitivity Labels for Fabric**:
 - Discover, classify, and protect Fabric data using sensitivity labels
 - Sensitivity labels can be set on all Fabric items
-- Data protection persists when exported via supported export paths
-- Automated label application based on content analysis
+- Label-based protection persists when data is exported via supported export paths (label/protection inheritance on export is currently supported for Power BI items only; other Fabric export paths issue a warning but don't carry the label)
+- Automatic label application via default labels, downstream inheritance, inheritance from data sources, and programmatic (Power BI admin REST API) labeling; Data Map scans can also auto-assign labels based on classification rules
+- Access to Fabric items can be controlled with sensitivity labels through Microsoft Purview **protection policies**
 
 **Label Hierarchy and Policies**:
 ```
@@ -68,22 +70,26 @@ Sensitivity Label Structure:
 
 ### Microsoft Purview Data Loss Prevention (DLP)
 **Current DLP Capabilities**:
-- DLP policies currently supported for Power BI semantic models
-- Detection of sensitive data upload into semantic models
+- DLP policies for Fabric and Power BI now support structured data across multiple item types, not just Power BI semantic models. Supported item types: semantic models, lakehouses, warehouses, KQL databases, mirrored databases, SQL databases, and Cosmos databases
+- Detection of sensitive data uploaded into OneLake and into supported Fabric items
 - Recognition of sensitivity labels and sensitive information types (credit cards, SSNs)
-- Policy tips for semantic model owners and alerts for security administrators
-- Override capabilities for data owners with proper justification
+- Policy tips for Fabric item and semantic model owners, and alerts for security administrators
+- **Restrict access** action (in preview) that limits an item to its data owners or to members of the organization when a policy match occurs
+- Override capabilities for workspace admins where the policy allows it
+- Note: DLP for Fabric evaluates data in Delta-format tables only, requires Fabric or Premium capacity, and doesn't support advanced classifiers (EDM, trainable, credential, and named-entity classifiers)
 
 **DLP Policy Configuration**:
 ```
 DLP Policy Components:
-├── Locations (Power BI Semantic Models)
+├── Locations (Fabric and Power BI workspaces)
+│   └── Item types: semantic models, lakehouses, warehouses,
+│       KQL / SQL / mirrored / Cosmos databases
 ├── Conditions
 │   ├── Sensitivity Labels
 │   ├── Sensitive Info Types
 │   └── Content Patterns
 ├── Actions
-│   ├── Block Access
+│   ├── Restrict Access (preview)
 │   ├── Generate Alerts
 │   ├── Policy Tips
 │   └── Allow Override
@@ -104,20 +110,32 @@ DLP Policy Components:
 - Data export and sharing activities
 - Policy violations and security incidents
 
-## 3. Microsoft Purview Hub in Fabric
+### Microsoft Purview Insider Risk Management (IRM)
+- Ready-to-use risk indicators for Fabric (Power BI and lakehouse activities)
+- Detections specific to Fabric data exfiltration scenarios (for example, exporting Power BI reports or moving data from lakehouse and warehouse assets) via the data theft policy
+- IRM reporting to monitor Fabric-related risky activities and help identify potential insider risks
+
+### Microsoft Purview Governance for Fabric Copilots and Agents
+- Risk discovery in Copilot/agent prompts and responses
+- Audit coverage for AI interactions
+- Retention and eDiscovery applicability to AI-generated content
+- Detection of non-compliant or risky AI usage across supported Fabric workloads
+
+## 3. Microsoft Purview Hub in Fabric and the OneLake Catalog
 
 ### Integrated Governance Experience
 The Microsoft Purview Hub provides:
-- Insights about Fabric data directly within the Fabric interface
-- Gateway functionality between Fabric and broader Purview ecosystem
-- Unified governance dashboard for all data assets
-- Seamless navigation between Fabric workspaces and Purview portal
+- Insights about Fabric data inventory, sensitivity labels, and endorsements directly within the Fabric interface
+- Gateway functionality between Fabric and the broader Purview ecosystem
+- Seamless navigation between Fabric workspaces and the Purview portal
 
-### Hub Capabilities
-- **Data Estate Overview**: Comprehensive view of data assets across the estate
-- **Governance Insights**: Key metrics and trends for data governance
-- **Policy Management**: Centralized policy creation and management
-- **Compliance Reporting**: Automated compliance status and reports
+> **2026 update:** The security and governance insights previously surfaced in the Microsoft Purview Hub are now available in the **OneLake catalog**, under its **Govern** tab. The OneLake catalog is the centralized in-Fabric governance experience and is organized into three tabs — **Explore**, **Govern**, and **Secure**. The Govern tab for Fabric admins (generally available as of March 2026) provides tenant-wide insights, recommended actions, and reports.
+
+### Govern Tab / Hub Capabilities
+- **Data Estate Overview**: Inventory overview, capacities & domains, and feature usage across the tenant ("Manage your data estate")
+- **Protect, Secure & Comply**: Sensitivity-label coverage and DLP policy insights across workspaces, with drill-down by item type, user, domain, or workspace
+- **Discover, Trust & Reuse**: Data freshness, curation state (description and endorsement coverage), and content sharing views
+- **Recommended Actions**: Guided actions to improve the governance posture of your data, with Copilot-assisted exploration
 
 ## 4. Advanced Security and Governance Features
 
@@ -199,7 +217,7 @@ Source Systems → OneLake → Fabric Workspaces → Semantic Models → Reports
 1. Enable Microsoft Purview for the organization
 2. Configure Purview Hub in Fabric workspaces
 3. Establish basic sensitivity label taxonomy
-4. Set up initial DLP policies for Power BI
+4. Set up initial DLP policies for Fabric and Power BI
 
 **Basic Integration Configuration**:
 - Connect Fabric tenant to Purview catalog
@@ -235,25 +253,31 @@ Source Systems → OneLake → Fabric Workspaces → Semantic Models → Reports
 
 ## 7. Current Capabilities and Limitations
 
-### Available Integrations (As of 2025)
+### Available Integrations (As of the July 2026 review)
 ✅ **Currently Available**:
-- Microsoft Purview Unified Catalog integration
-- Information Protection with sensitivity labels
-- DLP policies for Power BI semantic models
+- Microsoft Purview Unified Catalog and Data Map integration (same-tenant and cross-tenant)
+- Information Protection with sensitivity labels on all Fabric items
+- Protection policies for access control based on sensitivity labels
+- DLP policies for Fabric and Power BI across semantic models, lakehouses, warehouses, and KQL/SQL/mirrored/Cosmos databases (including a restrict-access action in preview)
+- Insider Risk Management indicators for Fabric (Power BI and lakehouse), including data-theft detection
+- Purview governance and risk controls for Fabric Copilots and agents
 - Comprehensive audit logging
-- Purview Hub in Fabric interface
+- Purview Hub plus the OneLake catalog Govern tab in the Fabric interface
 
 ### Limitations and Future Enhancements
 **Current Limitations**:
-- DLP policies limited to Power BI semantic models only
-- Cross-service policy consistency challenges
-- Limited real-time governance policy enforcement
-- Restricted custom classification rule capabilities
+- DLP for Fabric evaluates data in Delta-format tables only and requires Fabric or Premium capacity
+- DLP restrict-access action is still in preview
+- DLP doesn't support advanced classifiers (exact data match, trainable, credential, and named-entity classifiers) or policy templates (custom policies only)
+- Sensitivity-label inheritance from data sources is currently supported for Power BI semantic models only
+- Label/protection inheritance on export is currently supported for Power BI items only; other Fabric export paths issue a warning but don't carry the label
+- The OneLake catalog Govern tab doesn't support cross-tenant scenarios, guest users, or Private Link environments
+- Cross-service policy consistency and real-time enforcement can still require multiple configuration layers (workspace roles, OneLake security, labels, and DLP evaluate independently)
 
-**Planned Enhancements**:
-- Expanded DLP coverage across all Fabric services
-- Enhanced AI governance capabilities for Copilot integration
-- Advanced data observability features
+**Areas of Continued Investment**:
+- Broader DLP coverage and general availability of restrict-access enforcement
+- Wider label inheritance and export protection across non-Power BI Fabric experiences
+- Deeper AI governance for Fabric Copilots and agents
 - Improved cross-tenant governance capabilities
 
 ## 8. Best Practices and Recommendations
