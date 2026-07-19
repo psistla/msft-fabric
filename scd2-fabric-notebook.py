@@ -3,27 +3,48 @@
 # Utilizing Microsoft Fabric autotune optimization and best practices
 
 # %%
-# Cell 1: Import Required Libraries and Configure Spark Session
-from pyspark.sql import SparkSession
+# Cell 1: Import Required Libraries and Configure the Spark Session
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from delta.tables import DeltaTable
 import datetime
 from pyspark.sql.window import Window
 
-# Configure Spark session with autotune enabled
-spark = SparkSession.builder \
-    .appName("SCD_Type2_Large_Table") \
-    .config("spark.databricks.optimizer.autotune.enabled", "true") \
-    .config("spark.sql.parquet.vorder.enabled", "false") \
-    .config("spark.databricks.delta.optimize.write.enabled", "true") \
-    .config("spark.databricks.delta.optimizeWrite.binSize", "512") \
-    .config("spark.sql.shuffle.partitions", "auto") \
-    .config("spark.sql.adaptive.enabled", "true") \
-    .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
-    .getOrCreate()
+# NOTE (Fabric): a notebook already has a ready-to-use `spark` session backed by
+# the workspace's Live Pool. Do NOT build your own SparkSession with
+# SparkSession.builder / getOrCreate() -- just use the provided `spark` object and
+# tune it at runtime with spark.conf.set(...). (The former builder here also used
+# Databricks-only config keys that are silently ignored on Fabric.)
 
-print("Spark session configured with autotune and optimization settings")
+# --- Fabric autotune (verified key) ---
+# Correct key is spark.ms.autotune.enabled (the old spark.databricks.optimizer.*
+# key does nothing on Fabric). Autotune is a preview feature, OFF by default, and
+# is only honored on Runtime 1.2; on newer runtimes this config is simply ignored,
+# so it is safe to set. It auto-tunes shuffle partitions, broadcast-join threshold
+# and max partition bytes per query -- which is why we no longer hard-code them.
+spark.conf.set("spark.ms.autotune.enabled", "true")
+
+# --- Optimized Write (verified Fabric keys) ---
+# Fabric's Delta writer uses the spark.microsoft.delta.* namespace. Optimized write
+# does pre-write bin-packing so MERGE/UPDATE/DELETE produce fewer, larger files.
+spark.conf.set("spark.microsoft.delta.optimizeWrite.enabled", "true")
+# Target bin size in BYTES (1 GiB), matching the official Fabric lakehouse tutorial.
+spark.conf.set("spark.microsoft.delta.optimizeWrite.binSize", "1073741824")
+
+# --- V-Order ---
+# Left OFF here because this is a write-heavy MERGE workload (V-Order adds write
+# overhead). If this dimension is primarily read by Power BI / Direct Lake, set
+# this to "true" (or run OPTIMIZE ... VORDER) for better read performance.
+spark.conf.set("spark.sql.parquet.vorder.enabled", "false")
+
+# --- Adaptive Query Execution ---
+# AQE is enabled by default on Fabric and adapts shuffle partition counts at
+# runtime, so we intentionally do NOT set spark.sql.shuffle.partitions
+# (the old value "auto" is invalid -- that setting expects an integer).
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
+
+print("Spark session configured with Fabric autotune and optimized-write settings")
 
 # %%
 # Cell 2: Define Configuration Parameters
@@ -71,17 +92,26 @@ def add_scd2_columns(df):
 
 def generate_surrogate_key(df, target_table_path):
     """
-    Generate surrogate keys for new records
+    Generate surrogate keys for new records.
+
+    LIMITATION: row_number() over Window.orderBy(lit(1)) forces every row into a
+    single partition to compute a global sequence, which does not scale and is NOT
+    safe under concurrent writers (two jobs can read the same max and collide).
+    It is kept here because it is simple and adequate for a single-writer batch
+    demo. For production consider one of:
+      * a Delta IDENTITY column on surrogate_key (GENERATED ALWAYS AS IDENTITY),
+      * monotonically_increasing_id() + max_key (non-contiguous but cheap), or
+      * an external sequence generated once per pipeline run.
     """
     # Get max surrogate key from target table
     try:
         max_key = spark.read.format("delta").load(target_table_path) \
             .selectExpr("max(surrogate_key) as max_key") \
             .collect()[0]["max_key"] or 0
-    except:
+    except Exception:
         max_key = 0
-    
-    # Add row numbers and create surrogate keys
+
+    # Add row numbers and create surrogate keys (see LIMITATION above).
     window_spec = Window.orderBy(lit(1))
     return df.withColumn("surrogate_key", row_number().over(window_spec) + max_key)
 
@@ -99,11 +129,14 @@ def load_source_data():
     
     # Add hash key for change detection
     source_df = generate_hash_key(source_df, HASH_COLUMNS)
-    
-    # Cache if data size is manageable
-    if source_df.count() < 10000000:  # Adjust threshold based on cluster size
-        source_df.cache()
-    
+
+    # Cache once: the source is scanned multiple times downstream (new/changed/
+    # deleted detection, then again for the insert set), so materialize it now and
+    # reuse a single row count instead of recomputing it in the caller.
+    source_df.cache()
+    source_count = source_df.count()  # single action; also warms the cache
+    print(f"Source records count: {source_count:,}")
+
     return source_df
 
 # %%
@@ -183,68 +216,86 @@ def identify_changes(source_df, target_table_path):
 # Cell 7: Perform SCD Type 2 MERGE Operation
 def perform_scd2_merge(source_df, target_table_path):
     """
-    Execute SCD Type 2 merge with optimizations for large tables
+    Execute the SCD Type 2 upsert.
+
+    This is split into three explicit, set-based steps because a single MERGE
+    keyed on the natural key CANNOT do SCD2 correctly: for a *changed* record the
+    natural key matches the current row, so whenMatchedUpdate expires it, but
+    whenNotMatchedInsertAll never fires for that key -- the NEW version is lost.
+    (That was the original data-loss bug.)
+
+    Correct approach:
+      Step 1 - EXPIRE the current row of every CHANGED natural key (MERGE ...
+               whenMatchedUpdate). No inserts happen in this MERGE.
+      Step 2 - INSERT the new current version for BOTH new keys and changed keys
+               (append the fresh rows produced from the source).
+      Step 3 - EXPIRE current rows whose natural key disappeared from the source
+               (logical delete), using a set-based MERGE (no toPandas/driver
+               collect, and it works for string keys).
+
+    IMPORTANT: Step 3 assumes `source_df` is a FULL snapshot of the entity. If you
+    feed incremental/delta batches, remove the delete handling or it will wrongly
+    expire everything not present in the current batch.
     """
     # Get DeltaTable reference
     target_table = DeltaTable.forPath(spark, target_table_path)
-    
-    # Identify changes
+
+    # Identify changes once and cache the reused sets.
     new_records, changed_records, deleted_records = identify_changes(source_df, target_table_path)
-    
-    # Union new and changed records
+    new_records.cache()
+    changed_records.cache()
+    deleted_records.cache()
+
+    # Natural-key join predicate used by every step (composite-key safe).
+    key_match = " AND ".join([f"source.{key} = target.{key}" for key in NATURAL_KEY_COLUMNS])
+
+    # --- Step 1: expire the current version of changed records ---
+    changed_count = changed_records.count()
+    if changed_count > 0:
+        target_table.alias("target").merge(
+            changed_records.alias("source"),
+            f"{key_match} AND target.is_current = true"
+        ).whenMatchedUpdate(
+            set={
+                "to_date": current_timestamp(),
+                "is_current": lit(False)
+            }
+        ).execute()
+        print(f"Expired {changed_count:,} changed record(s)")
+
+    # --- Step 2: insert the new current version for new AND changed keys ---
+    # New keys have no current row yet; changed keys had theirs expired in Step 1.
+    # Both need a brand-new current row, so we append them (not MERGE) which avoids
+    # the "new version never inserted" bug entirely.
     records_to_insert = new_records.unionByName(changed_records, allowMissingColumns=True)
-    
-    if records_to_insert.count() > 0:
-        # Add SCD2 columns
+    insert_count = records_to_insert.count()
+    if insert_count > 0:
         records_to_insert = add_scd2_columns(records_to_insert)
         records_to_insert = generate_surrogate_key(records_to_insert, target_table_path)
-        
-        # Create join condition for merge
-        merge_condition = " AND ".join([f"source.{key} = target.{key}" for key in NATURAL_KEY_COLUMNS])
-        merge_condition += " AND target.is_current = true"
-        
-        # Perform merge operation
-        merge_builder = target_table.alias("target").merge(
-            records_to_insert.alias("source"),
-            merge_condition
+
+        # Align to the target schema and append as new current rows.
+        target_cols = spark.read.format("delta").load(target_table_path).columns
+        records_to_insert = records_to_insert.select(
+            [col(c) for c in target_cols if c in records_to_insert.columns]
         )
-        
-        # Update existing records - set end date and is_current flag
-        merge_builder = merge_builder.whenMatchedUpdate(
+        records_to_insert.write.format("delta").mode("append").save(target_table_path)
+        print(f"Inserted {insert_count:,} new current record(s) (new + changed versions)")
+
+    # --- Step 3: logical delete of records that vanished from the source ---
+    delete_count = deleted_records.count()
+    if delete_count > 0:
+        # Set-based MERGE: expire current target rows whose natural key is in the
+        # deleted set. No driver-side collect, and correct for string keys.
+        target_table.alias("target").merge(
+            deleted_records.alias("source"),
+            f"{key_match} AND target.is_current = true"
+        ).whenMatchedUpdate(
             set={
                 "to_date": current_timestamp(),
                 "is_current": lit(False)
             }
-        )
-        
-        # Insert new versions
-        merge_builder = merge_builder.whenNotMatchedInsertAll()
-        
-        # Execute merge
-        merge_builder.execute()
-        
-        print(f"Merged {records_to_insert.count()} records")
-    
-    # Handle deleted records
-    if deleted_records.count() > 0:
-        # Create condition for deleted records
-        delete_conditions = []
-        for _, row in deleted_records.toPandas().iterrows():
-            cond = " AND ".join([f"{key} = '{row[key]}'" for key in NATURAL_KEY_COLUMNS])
-            delete_conditions.append(f"({cond})")
-        
-        delete_condition = " OR ".join(delete_conditions) + " AND is_current = true"
-        
-        # Update deleted records
-        target_table.update(
-            condition=delete_condition,
-            set={
-                "to_date": current_timestamp(),
-                "is_current": lit(False)
-            }
-        )
-        
-        print(f"Marked {deleted_records.count()} records as deleted")
+        ).execute()
+        print(f"Marked {delete_count:,} record(s) as deleted")
 
 # %%
 # Cell 8: Optimize Delta Table Performance
@@ -253,32 +304,39 @@ def optimize_delta_table(table_path):
     Apply optimization techniques for large delta tables
     """
     print(f"Starting optimization for {TARGET_TABLE_NAME}")
-    
-    # Run OPTIMIZE command with bin-packing
-    spark.sql(f"""
-        OPTIMIZE delta.`{table_path}`
-        WHERE to_date >= current_date() - INTERVAL 7 DAYS
-    """)
-    
-    # Apply Z-ORDER on frequently queried columns
+
+    # Run OPTIMIZE with Z-ORDER in a SINGLE command.
+    # Fixes:
+    #  * The old code scoped OPTIMIZE with `WHERE to_date >= ...`. An OPTIMIZE
+    #    WHERE predicate is evaluated against file-level statistics; scoping on a
+    #    frequently-rewritten metadata column like to_date is unreliable and the
+    #    original also ran OPTIMIZE twice (full table, then again for Z-ORDER).
+    #    If you want incremental maintenance, scope the WHERE on a PARTITION
+    #    column instead, e.g. `WHERE year = 2026 AND month = 7`.
+    #  * Z-Order and compaction are combined so files are only rewritten once.
     if NATURAL_KEY_COLUMNS:
         zorder_cols = ", ".join(NATURAL_KEY_COLUMNS[:2])  # Z-order on first 2 keys
         spark.sql(f"""
             OPTIMIZE delta.`{table_path}`
             ZORDER BY ({zorder_cols})
         """)
-    
-    # Run VACUUM to remove old files (keeping 7 days for time travel)
+    else:
+        spark.sql(f"OPTIMIZE delta.`{table_path}`")
+
+    # Run VACUUM to remove old files. 168 HOURS == 7 days, the Fabric default
+    # retention floor; going lower breaks time travel and can hit concurrent
+    # readers/writers (and triggers the retention-duration safety check).
     spark.sql(f"""
         VACUUM delta.`{table_path}` RETAIN 168 HOURS
     """)
-    
-    # Compute statistics for better query performance
-    spark.sql(f"""
-        ANALYZE TABLE delta.`{table_path}` 
-        COMPUTE STATISTICS
-    """)
-    
+
+    # NOTE: Delta on Fabric auto-collects column statistics on write (used for
+    # data skipping), so an explicit ANALYZE TABLE ... COMPUTE STATISTICS is not
+    # required for file skipping. It is left out here; if you want cost-based
+    # optimizer stats, run it against the registered table name (ANALYZE against
+    # a delta.`path` reference is not supported), e.g.:
+    #   spark.sql(f"ANALYZE TABLE {TARGET_TABLE_NAME} COMPUTE STATISTICS")
+
     print("Optimization completed")
 
 # %%
@@ -292,11 +350,10 @@ def execute_scd2_pipeline():
         start_time = datetime.datetime.now()
         print(f"Starting SCD Type 2 pipeline at {start_time}")
         
-        # Load source data
+        # Load source data (load_source_data caches and prints the row count once)
         print("Loading source data...")
         source_df = load_source_data()
-        print(f"Source records count: {source_df.count()}")
-        
+
         # Initialize target table if needed
         target_path = initialize_target_table(source_df)
         

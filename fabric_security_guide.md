@@ -4,17 +4,20 @@
 
 Microsoft Fabric provides a unified analytics platform with a unified Software as a Service (SaaS) experience, a unified billing model, and a lake centric, open, and AI powered framework that is secure and governed by default. This comprehensive security framework extends the general data analytics security principles specifically for Microsoft Fabric implementations.
 
+> **Last reviewed:** July 2026, against current Microsoft Learn documentation for Microsoft Fabric.
+
 ## 1. Fabric Platform Security Architecture
 
 ### OneLake Security Foundation
 - **Single Data Lake**: OneLake serves as the centralized data repository with unified security policies
-- **Azure Active Directory Integration**: Native AAD integration for identity and access management
+- **OneLake Security (RBAC)**: Role-based access control on OneLake data is generally available (GA as of May 2026, being enabled by default on supported items). Define security roles that grant read access to specific folders, tables, or schemas within a Fabric item, with optional row-level and column-level security inside a role. Policies are defined once and enforced consistently across engines (Lakehouse, Spark notebooks, SQL analytics endpoint in user's identity mode, and Direct Lake on OneLake semantic models are GA; Eventhouse RLS and authorized third-party engines are in preview)
+- **Microsoft Entra ID Integration**: Native Microsoft Entra ID (formerly Azure Active Directory / Azure AD) integration for identity and access management
 - **Workspace-Level Security**: Hierarchical security model with workspace, capacity, and tenant controls
 - **Cross-Service Security**: Consistent security policies across Data Factory, Synapse, Power BI, and other Fabric services
 
 ### Capacity and Licensing Security
 - **Fabric Capacity Management**: Security policies applied at capacity level (F2, F4, F8, etc.)
-- **SKU-Based Feature Access**: Copilot and AI features are rolling out to all paid SKUs, starting from F2 and above
+- **SKU-Based Feature Access**: Copilot and AI features require a paid Fabric capacity of F2 or higher (or Power BI Premium P1 or higher). Copilot is not supported on trial SKUs. The capacity must also be in a supported region; if the tenant or capacity is outside the US or EU data boundary, Copilot is disabled by default unless the admin enables cross-geo processing
 - **Tenant-Level Governance**: Enterprise-wide security policies and compliance controls
 - **Resource Isolation**: Dedicated compute resources for sensitive workloads
 
@@ -40,10 +43,10 @@ Microsoft Fabric provides a unified analytics platform with a unified Software a
 - **Alert and Monitoring**: Real-time security event detection and response
 
 ### Data Lakehouse Security
-- **Delta Lake Security**: ACID transactions with row-level and column-level security
+- **Delta Lake Security**: ACID transactions with OneLake security row-level and column-level security enforced on Delta parquet tables
 - **Spark Security**: Secure distributed processing with isolation controls
 - **Notebook Security**: Code execution security and secret management
-- **File-Level Permissions**: Granular access control on lakehouse files and folders
+- **File, Folder, Table, Row, and Column-Level Permissions**: Granular access control on lakehouse files, folders, tables, rows, and columns through OneLake security roles
 
 ## 3. Data Warehouse Security Features
 
@@ -78,8 +81,8 @@ WITH (STATE = ON);
 - Row-level security only applies to queries on a Warehouse or SQL analytics endpoint in Fabric. Power BI queries on a warehouse in Direct Lake mode will fall back to Direct Query mode to abide by row-level security
 
 ### Column-Level Security (CLS)
-Column-Level and Row-Level Security in Fabric Warehouse & SQL Endpoint in Public preview provides:
-- **Data Masking**: Dynamic data masking prevents unauthorized viewing of sensitive data by using masks to prevent access to complete, such as email addresses or numbers
+Column-Level Security, Row-Level Security, and Dynamic Data Masking in Fabric Warehouse & SQL analytics endpoint are generally available data-protection features that provide:
+- **Data Masking**: Dynamic data masking prevents unauthorized viewing of sensitive data by using masks to prevent access to complete values, such as email addresses or numbers. CLS is implemented with the `GRANT` T-SQL statement and only Microsoft Entra authentication is supported. Like RLS, column-level security only applies to queries on a Warehouse or SQL analytics endpoint; Power BI queries on a warehouse in Direct Lake mode fall back to DirectQuery mode to abide by column-level security
 - **Column Permissions**: Granular access control on specific columns
 - **Sensitive Data Protection**: Automated classification and protection of PII and sensitive data
 
@@ -99,7 +102,8 @@ Column-Level and Row-Level Security in Fabric Warehouse & SQL Endpoint in Public
 
 ### Direct Lake Mode Security
 - **Performance Optimization**: Direct access to OneLake with security enforcement
-- **Fallback to DirectQuery**: Automatic fallback when RLS is applied
+- **Fallback to DirectQuery**: For semantic models in Direct Lake over SQL mode, queries automatically fall back to DirectQuery mode when RLS or CLS defined in the Warehouse/SQL analytics endpoint is applied
+- **Direct Lake on OneLake**: Semantic models using Direct Lake on OneLake mode enforce OneLake security RLS/CLS natively (GA) without falling back to DirectQuery
 - **Real-Time Data Access**: Secure access to live data without data movement
 - **Composite Model Security**: Security across multiple data sources
 
@@ -144,9 +148,9 @@ Column-Level and Row-Level Security in Fabric Warehouse & SQL Endpoint in Public
 - Memory overhead for maintaining security context
 
 **Cross-Service Consistency**:
-- RLS implementation varies between Warehouse, SQL Endpoint, and Power BI
-- Security policies must be managed separately across services
-- Limited cross-service security inheritance
+- Two distinct RLS/CLS models coexist: T-SQL-based RLS/CLS defined in the Warehouse/SQL analytics endpoint (enforced in the SQL/TDS context), and OneLake security RLS/CLS defined once on the lakehouse and enforced consistently across Fabric engines (Lakehouse, Spark, SQL analytics endpoint in user's identity mode, Direct Lake on OneLake). Choose the model appropriate to the item and access pattern.
+- Warehouse SQL security policies are not translated into OneLake security when data is read through OneLake shortcuts, so policies may still need to be planned per access path
+- Power BI semantic model RLS (DAX-based) remains a separate layer from database-tier RLS/CLS
 
 ### Data Governance Challenges
 
@@ -156,9 +160,10 @@ Column-Level and Row-Level Security in Fabric Warehouse & SQL Endpoint in Public
 - Difficulty in enterprise-wide policy enforcement
 
 **OneLake Security Granularity**:
-- File-level permissions may not provide sufficient granularity
-- Limited support for complex data lineage security
-- Challenges with nested folder permission inheritance
+- OneLake security (GA, May 2026) now provides RBAC roles with table-, folder-, schema-, row-, and column-level security, so earlier granularity gaps are largely addressed. Folder permissions inherit predictably to the entire subfolder/file hierarchy.
+- Remaining constraints to plan for: RLS and CLS rules cannot be combined across two or more separate roles (they must be applied within a single role); distribution lists added to a role can't be resolved by the SQL analytics endpoint; RLS/CLS data preview isn't supported on non-schema (unschematized) lakehouses (schema-enabled lakehouses are recommended); OneLake security roles with ReadWrite access can't contain RLS or CLS.
+- Scale limits apply per item (default 250 roles per item, up to 1000 by request; 500 members and 500 permissions per role).
+- Warehouse SQL security policies (RLS/CLS/OLS) are enforced only within the SQL (TDS) execution context and are not translated into OneLake security policies when the data is accessed through OneLake shortcuts.
 
 **Real-Time Security**:
 - Streaming data security policies are complex to implement
@@ -209,7 +214,7 @@ Enterprise Tenant
    - Row/column-level security for data protection
 
 2. **Identity and Access Management**:
-   - Azure AD groups for role-based access
+   - Microsoft Entra ID groups for role-based access
    - Service principals for automated processes
    - Guest user management for external collaboration
    - Regular access reviews and certification
@@ -248,9 +253,12 @@ Enterprise Tenant
 
 ## 9. Future Roadmap and Emerging Features
 
+### Recently Shipped (formerly roadmap)
+- OneLake security (RBAC) with folder-, table-, row-, and column-level security became generally available (May 2026), delivering define-once, enforce-across-engines security policy consistency
+- RLS, CLS, and Dynamic Data Masking in Fabric Warehouse & SQL analytics endpoint reached general availability
+
 ### Planned Security Enhancements
-- Enhanced row-level security with improved performance
-- Cross-service security policy inheritance
+- Broader engine coverage for OneLake security enforcement (e.g., Eventhouse RLS and authorized third-party engines are currently in preview)
 - Advanced AI-driven threat detection
 - Improved compliance and governance tools
 
@@ -294,7 +302,8 @@ Row-level security (RLS) enables you to use group membership or execution contex
 The implementation uses predicate-based security where row-level security prevents unauthorized viewing of rows in tables, using familiar WHERE clause filter predicates.
 
 ### Column-Level Security:
-Dynamic data masking prevents unauthorized viewing of sensitive data by using masks to prevent access to complete, such as email addresses or numbers, and Microsoft announced the availability of both Column-Level and Row-Level Security in Fabric Warehouse & SQL Endpoint in Public preview Announcing.
+Dynamic data masking prevents unauthorized viewing of sensitive data by using masks to prevent access to complete values, such as email addresses or numbers. Column-Level Security, Row-Level Security, and Dynamic Data Masking are generally available data-protection features in Fabric Warehouse and the SQL analytics endpoint.
+[Column-level security in Fabric data warehousing - Microsoft Learn](https://learn.microsoft.com/fabric/data-warehouse/column-level-security)
 
 ## Current Limitations and Challenges
 ### Power BI Integration Limitations:

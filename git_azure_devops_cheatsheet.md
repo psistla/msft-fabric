@@ -54,11 +54,14 @@ git config --global mergetool.vscode.cmd 'code --wait $MERGED'
 ```bash
 # Install Git Credential Manager (recommended)
 # Windows: Included with Git for Windows
-# macOS: brew install --cask git-credential-manager-core
-# Linux: Download from GitHub releases
+# macOS: brew install --cask git-credential-manager
+# Linux: Download from https://github.com/git-ecosystem/git-credential-manager/releases
 
 # Configure credential helper
-git config --global credential.helper manager-core
+git config --global credential.helper manager
+
+# Note: "manager" replaced the older "manager-core" helper (Git for Windows 2.39+ / GCM rename).
+# "manager-core" still works as a legacy alias if you're on an older version.
 
 # For Azure DevOps, you can also use Personal Access Token (PAT)
 # Generate PAT in Azure DevOps: User Settings > Personal Access Tokens
@@ -170,6 +173,12 @@ git reset HEAD filename.txt
 
 # Unstage all files
 git reset HEAD
+
+# Unstage file (Git 2.23+ modern syntax)
+git restore --staged filename.txt
+
+# Discard unstaged changes in working directory (Git 2.23+)
+git restore filename.txt
 ```
 
 ### Committing Changes
@@ -627,7 +636,7 @@ git rebase main                    # Rebase onto main
 ```bash
 # Clear credential cache
 git config --global --unset credential.helper
-git config --global credential.helper manager-core
+git config --global credential.helper manager
 
 # Manual credential entry
 git remote set-url origin https://username@dev.azure.com/YourOrg/YourProject/_git/YourRepo

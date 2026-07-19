@@ -1,101 +1,119 @@
 # Microsoft Fabric PySpark Cheatsheet
 *Based on verified Microsoft Fabric documentation and code examples*
 
+> **Namespace note:** MSSparkUtils was officially renamed to **NotebookUtils**. Use
+> `import notebookutils` and call `notebookutils.*`. The old `mssparkutils` namespace
+> remains backward compatible but is deprecated and will be retired; all new features
+> ship only under `notebookutils`. NotebookUtils requires Spark 3.4 (Runtime v1.2) or above.
+
 ## Essential Imports
 ```python
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, to_timestamp, current_timestamp, year, month
 from pyspark.sql.types import *
-from notebookutils import mssparkutils  # Updated namespace
+import notebookutils  # Current namespace (formerly mssparkutils)
 ```
 
-## Microsoft Spark Utilities (MSSparkUtils)
+## NotebookUtils
+
+Available modules: `notebookutils.fs`, `notebookutils.notebook`, `notebookutils.credentials`,
+`notebookutils.lakehouse`, `notebookutils.runtime`, `notebookutils.session`,
+`notebookutils.udf`, `notebookutils.variableLibrary`.
+
+Run `notebookutils.help()` for an overview, or `notebookutils.fs.help()` (etc.) per module.
 
 ### File System Operations
 ```python
-# Import utilities
-from notebookutils import mssparkutils
+import notebookutils
 
 # List directory contents
-mssparkutils.fs.ls("Files/tmp")  # Default lakehouse
-mssparkutils.fs.ls("abfss://<container>@<account>.dfs.core.windows.net/<path>")
+notebookutils.fs.ls("Files/tmp")  # Relative path; in a Spark notebook this resolves to the default lakehouse
+notebookutils.fs.ls("abfss://<container>@<account>.dfs.core.windows.net/<path>")
 
 # View file properties
-files = mssparkutils.fs.ls('directory_path')
+files = notebookutils.fs.ls('directory_path')
 for file in files:
     print(file.name, file.isDir, file.isFile, file.path, file.size)
 
-# Create directories
-mssparkutils.fs.mkdirs('new_directory_name')
-mssparkutils.fs.mkdirs("Files/<new_dir>")  # Default lakehouse
+# Create directories (creates parents as needed)
+notebookutils.fs.mkdirs("Files/<new_dir>")
 
 # Copy files/directories
-mssparkutils.fs.cp('source', 'destination', True)  # True for recursive
+notebookutils.fs.cp('source', 'destination', recurse=True)  # recurse defaults to False
 
-# Fast copy for large volumes
-mssparkutils.fs.fastcp('source', 'destination', True)
+# Fast copy (azcopy) for large volumes
+notebookutils.fs.fastcp('source', 'destination', recurse=True)  # recurse defaults to True
 
-# Move files/directories
-mssparkutils.fs.mv('source', 'destination', True)  # True to create parent dirs
+# Move files/directories: mv(src, dest, create_path, overwrite=False)
+notebookutils.fs.mv('source', 'destination', create_path=True, overwrite=True)
 
-# Preview file content
-mssparkutils.fs.head('file_path', 1024)  # maxBytes parameter
+# Preview file content: head(file, max_bytes=1024*100)
+notebookutils.fs.head('file_path', 1024)
 
-# Write to file
-mssparkutils.fs.put("file_path", "content", True)  # True to overwrite
+# Write a UTF-8 string to a file (last arg overwrites if True)
+notebookutils.fs.put("file_path", "content", True)
 
-# Append to file
-mssparkutils.fs.append("file_path", "content", True)  # True to create if not exists
+# Append to a file (last arg creates the file if it doesn't exist)
+notebookutils.fs.append("file_path", "content", True)
+
+# Check existence (use before cp/mv/rm to avoid errors)
+notebookutils.fs.exists("Files/data/input.csv")
 
 # Delete files/directories
-mssparkutils.fs.rm('file_path', True)  # True for recursive
+notebookutils.fs.rm('file_path', recurse=True)
+
+# getProperties(path) -> map of metadata. Python notebooks only (not PySpark/Scala/R).
+notebookutils.fs.getProperties("abfss://<container>@<account>.dfs.core.windows.net/<path>")
 ```
 
 ### Mount Operations
 ```python
-# Mount ADLS Gen2 with account key
-accountKey = mssparkutils.credentials.getSecret("<vaultURI>", "<secretName>")
-mssparkutils.fs.mount(
+# Mount a lakehouse or Fabric workspace storage with Microsoft Entra token (default, no creds)
+notebookutils.fs.mount(
+    "abfss://<workspace_name>@onelake.dfs.fabric.microsoft.com/<lakehouse_name>.Lakehouse",
+    "/test"
+)
+
+# Mount ADLS Gen2 with account key (store the key in Key Vault, not in code)
+accountKey = notebookutils.credentials.getSecret("<vaultURI>", "<secretName>")
+notebookutils.fs.mount(
     "abfss://mycontainer@<accountname>.dfs.core.windows.net",
     "/test",
     {"accountKey": accountKey}
 )
 
 # Mount with SAS token
-sasToken = mssparkutils.credentials.getSecret("<vaultURI>", "<secretName>")
-mssparkutils.fs.mount(
+sasToken = notebookutils.credentials.getSecret("<vaultURI>", "<secretName>")
+notebookutils.fs.mount(
     "abfss://mycontainer@<accountname>.dfs.core.windows.net",
     "/test",
     {"sasToken": sasToken}
 )
 
-# Mount a lakehouse
-mssparkutils.fs.mount(
-    "abfss://<workspace_id>@onelake.dfs.fabric.microsoft.com/<lakehouse_id>",
-    "/test"
-)
+# Optional tuning: extraConfigs supports fileCacheTimeout (default 120s; 0 = always latest) and timeout (default 30s)
+notebookutils.fs.mount("abfss://...", "/test", {"fileCacheTimeout": 0, "timeout": 30})
 
-# Access mounted files
-path = mssparkutils.fs.getMountPath("/test")
-mssparkutils.fs.ls(f"file://{path}")
+# Access mounted files via the notebookutils.fs API
+path = notebookutils.fs.getMountPath("/test")  # getMountPath(mountPoint, scope="")
+notebookutils.fs.ls(f"file://{path}")
 
 # Check existing mount points
-mssparkutils.fs.mounts()
+notebookutils.fs.mounts()
 
-# Unmount
-mssparkutils.fs.unmount("/test")
+# Unmount (NOT automatic — always call explicitly to release disk space)
+notebookutils.fs.unmount("/test")
 ```
 
 ### Notebook Operations
 ```python
-# Run another notebook
-exitVal = mssparkutils.notebook.run("NotebookName", 90, {"param": "value"})
+# Run another notebook: run(path, timeout_seconds=90, arguments=None, workspace="")
+exitVal = notebookutils.notebook.run("NotebookName", 90, {"param": "value"})
 
-# Run notebook in different workspace
-exitVal = mssparkutils.notebook.run("NotebookName", 90, {"param": "value"}, "workspace_id")
+# Run notebook in a different workspace (cross-workspace requires Runtime v1.2+)
+exitVal = notebookutils.notebook.run("NotebookName", 90, {"param": "value"}, "workspace_id")
 
 # Run multiple notebooks in parallel
-mssparkutils.notebook.runMultiple(["Notebook1", "Notebook2"])
+notebookutils.notebook.runMultiple(["Notebook1", "Notebook2"])
 
 # Run with dependencies (DAG structure)
 DAG = {
@@ -111,53 +129,76 @@ DAG = {
             "path": "NotebookSimple2",
             "timeoutPerCellInSeconds": 120,
             "args": {"p1": "value2", "p2": 200},
+            "retry": 1,
+            "retryIntervalInSeconds": 10,
             "dependencies": ["NotebookSimple"]
         }
     ],
-    "timeoutInSeconds": 43200,
-    "concurrency": 50
+    "timeoutInSeconds": 43200,   # entire DAG; default 43200 (12h)
+    "concurrency": 50            # default is 3x available CPU cores; 0 = unlimited
 }
-mssparkutils.notebook.runMultiple(DAG)
 
-# Exit notebook with value
-mssparkutils.notebook.exit("exit_value")
+# Validate before running (catches duplicate names, missing deps, cycles)
+notebookutils.notebook.validateDAG(DAG)
+
+# runMultiple(dag, config=None) -> {activity_name: {"exitVal": str, "exception": err|None}}
+results = notebookutils.notebook.runMultiple(DAG)
+
+# Exit notebook with a value (always a string; don't call inside try/except)
+notebookutils.notebook.exit("exit_value")
 ```
 
 ### Credentials & Security
 ```python
-# Get access tokens
-token = mssparkutils.credentials.getToken('storage')  # Storage audience
-token = mssparkutils.credentials.getToken('pbi')      # Power BI
-token = mssparkutils.credentials.getToken('keyvault') # Key Vault
-token = mssparkutils.credentials.getToken('kusto')    # Synapse RTA KQL DB
+# Get Microsoft Entra access tokens: getToken(audience)
+token = notebookutils.credentials.getToken('storage')   # Azure Storage (ADLS Gen2 / Blob)
+token = notebookutils.credentials.getToken('pbi')       # Power BI / Fabric REST APIs
+token = notebookutils.credentials.getToken('keyvault')  # Azure Key Vault
+token = notebookutils.credentials.getToken('kusto')     # Synapse RTA KQL DB (ADX)
 
-# Get secrets from Key Vault
-secret = mssparkutils.credentials.getSecret('https://<keyvault>.vault.azure.net/', 'secret_name')
+# Get secrets from Key Vault: getSecret(akvName, secret)
+secret = notebookutils.credentials.getSecret('https://<keyvault>.vault.azure.net/', 'secret_name')
+
+# Store a secret (Python/PySpark/R only, not public Scala API)
+notebookutils.credentials.putSecret('https://<keyvault>.vault.azure.net/', 'secret_name', 'secret_value')
 ```
 
 ### Lakehouse Management
 ```python
-# Create lakehouse artifact
-artifact = mssparkutils.lakehouse.create("artifact_name", "Description", "workspace_id")
+# Create a lakehouse (optional schema support via create)
+artifact = notebookutils.lakehouse.create("lakehouse_name", "Description", "workspace_id")
 
-# Get lakehouse artifact
-artifact = mssparkutils.lakehouse.get("artifact_name", "workspace_id")
+# Get a lakehouse (getWithProperties returns extended metadata + connection details)
+artifact = notebookutils.lakehouse.get("lakehouse_name", "workspace_id")
 
-# Update lakehouse artifact
-updated_artifact = mssparkutils.lakehouse.update("old_name", "new_name", "Updated description", "workspace_id")
+# Update: update(name, newName, description, workspaceId)
+updated = notebookutils.lakehouse.update("old_name", "new_name", "Updated description", "workspace_id")
 
-# Delete lakehouse artifact
-is_deleted = mssparkutils.lakehouse.delete("artifact_name", "workspace_id")
+# Delete -> Boolean
+is_deleted = notebookutils.lakehouse.delete("lakehouse_name", "workspace_id")
 
-# List all lakehouse artifacts
-artifacts_list = mssparkutils.lakehouse.list("workspace_id")
+# List lakehouses in a workspace
+lakehouses = notebookutils.lakehouse.list("workspace_id")
+
+# List tables in a lakehouse (workspaceId and maxResults optional)
+tables = notebookutils.lakehouse.listTables("lakehouse_name", "workspace_id")
 ```
 
 ### Runtime Context
 ```python
-# Get session context information
-context = mssparkutils.runtime.context
-print(context)  # Shows notebook name, default lakehouse, workspace info, etc.
+# Read-only session context (a dict)
+context = notebookutils.runtime.context
+print(context['currentNotebookName'])
+print(context['currentWorkspaceName'])
+print(context['defaultLakehouseName'])
+
+# Branch on execution mode
+if context['isForPipeline']:
+    print("Running in a pipeline")
+elif context['isReferenceRun']:
+    print("Running as a referenced notebook")
+else:
+    print("Interactive run")
 ```
 
 ## DataFrame Operations
@@ -184,9 +225,9 @@ df = spark.read.schema(schema).csv("Files/data/orders.csv", header=True)
 
 ### Data Transformations
 ```python
-# Add columns with current timestamp
 from pyspark.sql.functions import col, to_timestamp, current_timestamp, year, month
 
+# Add columns with current timestamp
 df_with_timestamp = df.withColumn("dataload_datetime", current_timestamp())
 
 # Add year and month columns
@@ -211,23 +252,37 @@ df_grouped = df.groupBy("category").agg(
 # Write to Parquet
 df.write.mode("overwrite").parquet("Files/output/data.parquet")
 
-# Write to Delta table
+# Write to a lakehouse Delta table (managed tables only in Fabric)
 df.write.format("delta").mode("overwrite").saveAsTable("orders_processed")
 
-# Write to Fabric Data Warehouse
-df.write.synapsesql("<warehouse_name>.<schema_name>.<table_name>")
+# Overwrite with a schema change
+df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("orders_processed")
+```
 
-# Write with specific mode
-df.write.mode("errorifexists").synapsesql("<warehouse_name>.<schema_name>.<table_name>")
-df.write.mode("append").synapsesql("<warehouse_name>.<schema_name>.<table_name>")
-df.write.mode("overwrite").synapsesql("<warehouse_name>.<schema_name>.<table_name>")
+### Fabric Data Warehouse (Spark connector)
+```python
+# Required imports before using the connector (the connector ships in the Fabric runtime;
+# no installation needed). Run these at the top of the notebook.
+import com.microsoft.spark.fabric
+from com.microsoft.spark.fabric.Constants import Constants
+
+# Read from a warehouse / lakehouse SQL analytics endpoint (three-part name)
+df = spark.read.synapsesql("<warehouse_or_lakehouse>.<schema>.<table_or_view>")
+
+# Read with a custom T-SQL query
+df = spark.read.option(Constants.DatabaseName, "<warehouse>").synapsesql("<T-SQL query>")
+
+# Write to a warehouse table (write requires the GA runtime, Runtime 1.3+)
+# Supported save modes: errorifexists (default), ignore, overwrite, append
+df.write.mode("overwrite").synapsesql("<warehouse>.<schema>.<table>")
+df.write.mode("append").synapsesql("<warehouse>.<schema>.<table>")
 ```
 
 ## Spark SQL Integration
 
 ### Using SQL Magic
 ```python
-# In notebook cell, use %%sql magic
+# In a notebook cell, use the %%sql magic
 %%sql
 SELECT * FROM salesorders LIMIT 1000
 ```
@@ -240,28 +295,24 @@ df.createOrReplaceTempView("temp_orders")
 # Execute SQL query
 result_df = spark.sql("SELECT * FROM temp_orders WHERE amount > 100")
 
-# Query lakehouse tables directly
-df = spark.sql("SELECT * FROM [lakehouse_name].table_name LIMIT 1000")
+# Query lakehouse tables (use the fully qualified name lakehouse_name.table_name)
+df = spark.sql("SELECT * FROM lakehouse_name.table_name LIMIT 1000")
 ```
 
 ## Display and Visualization
 ```python
-# Display DataFrame
+# Rich, interactive table/chart view (Fabric built-in; chart config persists across reruns)
 display(df)
 
-# Show DataFrame (basic)
+# Basic show
 df.show()
-
-# Show with specific number of rows
 df.show(20)
 
 # Collect data to driver (use with caution)
 data = df.collect()
 
-# Get schema information
+# Schema and stats
 df.printSchema()
-
-# Get basic statistics
 df.describe().show()
 ```
 
@@ -337,27 +388,73 @@ for stream in spark.streams.active:
 
 ### Lakehouse Integration
 ```python
-# Access default lakehouse files
-files = mssparkutils.fs.ls("Files/")
+# Access default lakehouse files / tables
+files = notebookutils.fs.ls("Files/")
+tables = notebookutils.fs.ls("Tables/")
 
-# Access lakehouse tables
-tables = mssparkutils.fs.ls("Tables/")
-
-# Read from lakehouse table
+# Read from a lakehouse Delta table
 df = spark.read.format("delta").load("Tables/table_name")
 ```
 
 ### OneLake Integration
 ```python
-# Access OneLake paths
-onelake_path = "abfss://workspace_id@onelake.dfs.fabric.microsoft.com/lakehouse_id/Files/"
+# Access OneLake paths (global endpoint only — regional endpoints are not supported)
+onelake_path = "abfss://<workspace_id>@onelake.dfs.fabric.microsoft.com/<lakehouse_id>/Files/"
 df = spark.read.parquet(onelake_path + "data.parquet")
+```
+
+### V-Order and Optimize Write
+```python
+# V-Order is disabled by default in new Fabric workspaces (write-heavy default).
+# Enable it for read-heavy / Direct Lake / Warehouse-consumed (gold) tables.
+spark.conf.set("spark.sql.parquet.vorder.default", "true")   # session-level
+spark.conf.get("spark.sql.parquet.vorder.default")           # check current value
+
+# Optimize Write (fewer, larger files)
+spark.conf.set("spark.databricks.delta.optimizeWrite.enabled", "true")
+```
+```sql
+-- Table-level V-Order (affects future writes only)
+%%sql
+ALTER TABLE person SET TBLPROPERTIES("delta.parquet.vorder.enabled" = "true");
+
+-- Compact and (re)apply V-Order + Z-Order in one command
+OPTIMIZE myTable WHERE date >= '2025-01-01' ZORDER BY (customer_id) VORDER;
+```
+> In Runtime 1.3+ the older `spark.sql.parquet.vorder.enable` setting was removed;
+> use `spark.sql.parquet.vorder.default` (or resource profiles like `readHeavyForSpark`).
+
+### Variable Library
+```python
+# Read centrally managed variables from a Variable Library item
+notebookutils.variableLibrary.help()
+value = notebookutils.variableLibrary.get("$(/**/<library_name>/<variable_name>)")
+```
+
+### Semantic Link (SemPy)
+```python
+# Semantic link is preinstalled in Runtime 1.2 (Spark 3.4) and above.
+# Upgrade with: %pip install -U semantic-link
+import sempy.fabric as fabric
+
+# Read a Power BI semantic model table into a FabricDataFrame
+df = fabric.read_table("<dataset_name>", "<table_name>")
+
+# Evaluate a DAX query
+df_dax = fabric.evaluate_dax("<dataset_name>", "EVALUATE <table_or_expression>")
+
+# Evaluate a measure
+df_measure = fabric.evaluate_measure("<dataset_name>", "<measure_name>")
+```
+```python
+# %%dax cell magic (load once with %load_ext sempy); result is captured in `_`
+%load_ext sempy
 ```
 
 ### Notebook Resources
 ```python
-# Use notebook resources path
-resource_path = mssparkutils.nbResPath
+# Path to the notebook's built-in resource folder (use in referenced notebooks too)
+resource_path = notebookutils.nbResPath
 config_df = spark.read.json(f"{resource_path}/config.json")
 ```
 
