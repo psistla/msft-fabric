@@ -9,7 +9,7 @@ Microsoft Purview extends Microsoft Fabric's native security capabilities by pro
 ### Unified Data Governance Platform
 Microsoft Purview is a family of data governance, risk, and compliance solutions that includes:
 - **Risk and Compliance Solutions**: Microsoft 365 compliance capabilities
-- **Unified Data Governance Solutions**: Microsoft Purview data governance, delivered through two solutions — the **Data Map** and the **Unified Catalog** (the former standalone "Azure Purview" governance portal has been consolidated into the unified Microsoft Purview portal)
+- **Unified Data Governance Solutions**: Microsoft Purview data governance, delivered through two solutions: the **Data Map** and the **Unified Catalog** (the former standalone "Azure Purview" governance portal has been consolidated into the unified Microsoft Purview portal)
 - **Cross-Platform Coverage**: Microsoft 365, on-premises, multicloud, and SaaS data services
 
 ### Integration Benefits
@@ -129,7 +129,7 @@ The Microsoft Purview Hub provides:
 - Gateway functionality between Fabric and the broader Purview ecosystem
 - Seamless navigation between Fabric workspaces and the Purview portal
 
-> **2026 update:** The security and governance insights previously surfaced in the Microsoft Purview Hub are now available in the **OneLake catalog**, under its **Govern** tab. The OneLake catalog is the centralized in-Fabric governance experience and is organized into three tabs — **Explore**, **Govern**, and **Secure**. The Govern tab for Fabric admins (generally available as of March 2026) provides tenant-wide insights, recommended actions, and reports.
+> **2026 update:** The security and governance insights previously surfaced in the Microsoft Purview Hub are now available in the **OneLake catalog**, under its **Govern** tab. The OneLake catalog is the centralized in-Fabric governance experience and is organized into three tabs: **Explore**, **Govern**, and **Secure**. The Govern tab for Fabric admins (generally available as of March 2026) provides tenant-wide insights, recommended actions, and reports.
 
 ### Govern Tab / Hub Capabilities
 - **Data Estate Overview**: Inventory overview, capacities & domains, and feature usage across the tenant ("Manage your data estate")

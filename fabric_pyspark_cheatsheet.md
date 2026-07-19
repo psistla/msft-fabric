@@ -100,7 +100,7 @@ notebookutils.fs.ls(f"file://{path}")
 # Check existing mount points
 notebookutils.fs.mounts()
 
-# Unmount (NOT automatic — always call explicitly to release disk space)
+# Unmount (NOT automatic: always call explicitly to release disk space)
 notebookutils.fs.unmount("/test")
 ```
 
@@ -398,7 +398,7 @@ df = spark.read.format("delta").load("Tables/table_name")
 
 ### OneLake Integration
 ```python
-# Access OneLake paths (global endpoint only — regional endpoints are not supported)
+# Access OneLake paths (global endpoint only: regional endpoints are not supported)
 onelake_path = "abfss://<workspace_id>@onelake.dfs.fabric.microsoft.com/<lakehouse_id>/Files/"
 df = spark.read.parquet(onelake_path + "data.parquet")
 ```
