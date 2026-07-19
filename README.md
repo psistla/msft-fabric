@@ -34,7 +34,7 @@ This material is aimed at **data engineers**, **analytics engineers**, and **Fab
 
 - Browse the **Guides & Best Practices** when standing up a new workspace, hardening security, or defining governance and naming conventions.
 - Keep the **Cheatsheets** handy for quick syntax lookups while working in notebooks, the warehouse, or source control.
-- Adapt the **Code & Notebooks** as starting points for your own pipelines — review and test against your own environment before using them in production.
+- Adapt the **Code & Notebooks** as starting points for your own pipelines; review and test against your own environment before using them in production.
 
 ## Disclaimer
 
